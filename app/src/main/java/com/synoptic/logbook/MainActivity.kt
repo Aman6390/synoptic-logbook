@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,12 +31,15 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -100,6 +104,7 @@ class MainActivity : ComponentActivity() {
             val vm: ObservationViewModel = viewModel()
             val drawerState = rememberDrawerState(DrawerValue.Closed)
             val scope = rememberCoroutineScope()
+            val context = LocalContext.current
 
             // Light / Dark theme from the drawer toggle
             MaterialTheme(
@@ -153,6 +158,43 @@ class MainActivity : ComponentActivity() {
                                         onCheckedChange = { vm.isDarkTheme.value = it }
                                     )
                                 }
+
+                                Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                                // Check for updates option in settings
+                                NavigationDrawerItem(
+                                    label = {
+                                        Column {
+                                            Text("Check for updates")
+                                            Text(
+                                                "Current: v${vm.currentAppVersion}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            vm.updateStatusMessage.value?.let { msg ->
+                                                Text(
+                                                    msg,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        }
+                                    },
+                                    icon = {
+                                        if (vm.isCheckingUpdate.value) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(24.dp),
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else {
+                                            Icon(Icons.Filled.Refresh, contentDescription = "Check for updates")
+                                        }
+                                    },
+                                    selected = false,
+                                    onClick = {
+                                        vm.checkForUpdates(isManual = true)
+                                    }
+                                )
                             }
                         }
                     ) {
@@ -164,6 +206,74 @@ class MainActivity : ComponentActivity() {
                                 scope.launch { drawerState.open() }
                             }
                         }
+                    }
+
+                    // Aggressive OTA Update Dialog
+                    if (vm.showUpdateDialog.value && vm.updateInfo.value != null) {
+                        val info = vm.updateInfo.value!!
+                        val progress = vm.downloadProgress.value
+                        val isDownloading = progress != null
+
+                        AlertDialog(
+                            onDismissRequest = {
+                                if (!isDownloading) vm.showUpdateDialog.value = false
+                            },
+                            title = {
+                                Text(
+                                    text = "Update Available!",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleLarge
+                                )
+                            },
+                            text = {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        "A new version (${info.version}) is available.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    if (info.changelog.isNotBlank()) {
+                                        Text(
+                                            info.changelog,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    if (isDownloading) {
+                                        Spacer(Modifier.height(8.dp))
+                                        LinearProgressIndicator(
+                                            progress = progress ?: 0f,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        Text(
+                                            "Downloading: ${((progress ?: 0f) * 100).toInt()}%",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = { vm.startDownloadAndUpdate(context) },
+                                    enabled = !isDownloading
+                                ) {
+                                    Text(
+                                        "Update Now!",
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(
+                                    onClick = { vm.showUpdateDialog.value = false },
+                                    enabled = !isDownloading
+                                ) {
+                                    Text("Later")
+                                }
+                            }
+                        )
                     }
                 }
             }

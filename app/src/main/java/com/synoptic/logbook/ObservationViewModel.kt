@@ -1,6 +1,7 @@
 package com.synoptic.logbook
 
 import android.app.Application
+import android.content.Context
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
@@ -208,7 +209,62 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
         currentScreen.value = AppScreen.FORM
     }
 
+    // ---------- Over-The-Air (OTA) Updates ----------
+    val currentAppVersion: String = BuildConfig.VERSION_NAME
+    val updateInfo = mutableStateOf<UpdateInfo?>(null)
+    val isCheckingUpdate = mutableStateOf(false)
+    val downloadProgress = mutableStateOf<Float?>(null)
+    val showUpdateDialog = mutableStateOf(false)
+    val updateStatusMessage = mutableStateOf<String?>(null)
+
+    fun checkForUpdates(isManual: Boolean = false) {
+        viewModelScope.launch {
+            isCheckingUpdate.value = true
+            updateStatusMessage.value = null
+            try {
+                val info = UpdateManager.checkLatestRelease(currentAppVersion)
+                if (info != null) {
+                    updateInfo.value = info
+                    showUpdateDialog.value = true
+                } else if (isManual) {
+                    updateStatusMessage.value = "You are on the latest version ($currentAppVersion)"
+                }
+            } catch (e: Exception) {
+                if (isManual) {
+                    updateStatusMessage.value = "Failed to check for updates: ${e.localizedMessage}"
+                }
+            } finally {
+                isCheckingUpdate.value = false
+            }
+        }
+    }
+
+    fun startDownloadAndUpdate(context: Context) {
+        val info = updateInfo.value ?: return
+        viewModelScope.launch {
+            downloadProgress.value = 0f
+            val apkFile = UpdateManager.downloadApk(
+                context = context,
+                apkUrl = info.apkUrl,
+                fileName = info.apkFileName,
+                onProgress = { progress ->
+                    downloadProgress.value = progress
+                }
+            )
+            downloadProgress.value = null
+            if (apkFile != null) {
+                showUpdateDialog.value = false
+                UpdateManager.installApk(context, apkFile)
+            } else {
+                updateStatusMessage.value = "Download failed. Please check internet connection."
+            }
+        }
+    }
+
     init {
+        // Aggressive update check on app launch
+        checkForUpdates(isManual = false)
+
         // Clock ticker: while the hour is AUTO, keep nowMillis fresh so the
         // auto-snap hour follows the device clock (every 30 s).
         viewModelScope.launch {
