@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 // ---------------------------------------------------------------------------
 // Shared constants + pure helpers
@@ -204,6 +206,123 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
     val currentScreen = mutableStateOf(AppScreen.FORM)
     val isDarkTheme = mutableStateOf(prefs.getBoolean("dark_theme", false))
 
+    // ---------- Validation & User Limits ----------
+    val validationLimits = mutableStateOf(ValidationLimits.load(app))
+    val showLimitsDialog = mutableStateOf(false)
+
+    fun updateLimits(newLimits: ValidationLimits) {
+        validationLimits.value = newLimits
+        ValidationLimits.save(getApplication(), newLimits)
+    }
+
+    private var isLoadingRecord = false
+
+    // Physical Sanity Checks
+    // 1. Wet Bulb <= Dry Bulb
+    val isWbExceedsDb: Boolean
+        get() {
+            val db = dryBulb.value.trim().toDoubleOrNull() ?: return false
+            val wb = wetBulb.value.trim().toDoubleOrNull() ?: return false
+            return wb > db
+        }
+
+    // 2. Max Temp >= Dry Bulb
+    val isMaxLessThanDb: Boolean
+        get() {
+            val max = maxTemp.value.trim().toDoubleOrNull() ?: return false
+            val db = dryBulb.value.trim().toDoubleOrNull() ?: return false
+            return max < db
+        }
+
+    // 3. Max Temp > Min Temp
+    val isMaxLessOrEqualToMin: Boolean
+        get() {
+            val max = maxTemp.value.trim().toDoubleOrNull() ?: return false
+            val min = minTemp.value.trim().toDoubleOrNull() ?: return false
+            return max <= min
+        }
+
+    // Field error indicators (subtle red outline, no layout changes)
+    val dryBulbError: Boolean
+        get() {
+            val v = dryBulb.value.trim().toDoubleOrNull() ?: return false
+            val lim = validationLimits.value
+            if (lim.enabled && (v < lim.dbMin || v > lim.dbMax)) return true
+            if (isWbExceedsDb) return true
+            if (isMaxLessThanDb) return true
+            return false
+        }
+
+    val wetBulbError: Boolean
+        get() {
+            val v = wetBulb.value.trim().toDoubleOrNull() ?: return false
+            val lim = validationLimits.value
+            if (lim.enabled && (v < lim.wbMin || v > lim.wbMax)) return true
+            if (isWbExceedsDb) return true
+            return false
+        }
+
+    val maxTempError: Boolean
+        get() {
+            val v = maxTemp.value.trim().toDoubleOrNull() ?: return false
+            val lim = validationLimits.value
+            if (lim.enabled && (v < lim.dbMin || v > lim.dbMax)) return true
+            if (isMaxLessThanDb) return true
+            if (isMaxLessOrEqualToMin) return true
+            return false
+        }
+
+    val minTempError: Boolean
+        get() {
+            val v = minTemp.value.trim().toDoubleOrNull() ?: return false
+            val lim = validationLimits.value
+            if (lim.enabled && (v < lim.dbMin || v > lim.dbMax)) return true
+            if (isMaxLessOrEqualToMin) return true
+            return false
+        }
+
+    val maxTempSetError: Boolean
+        get() {
+            val v = maxTempAfterSet.value.trim().toDoubleOrNull() ?: return false
+            val lim = validationLimits.value
+            return lim.enabled && (v < lim.dbMin || v > lim.dbMax)
+        }
+
+    val minTempSetError: Boolean
+        get() {
+            val v = minTempAfterSet.value.trim().toDoubleOrNull() ?: return false
+            val lim = validationLimits.value
+            return lim.enabled && (v < lim.dbMin || v > lim.dbMax)
+        }
+
+    val slpError: Boolean
+        get() {
+            val v = slp.value.trim().toDoubleOrNull() ?: return false
+            val lim = validationLimits.value
+            return lim.enabled && (v < lim.slpMin || v > lim.slpMax)
+        }
+
+    val pastSlpError: Boolean
+        get() {
+            val v = pastSlp.value.trim().toDoubleOrNull() ?: return false
+            val lim = validationLimits.value
+            return lim.enabled && (v < lim.slpMin || v > lim.slpMax)
+        }
+
+    val windSpeedError: Boolean
+        get() {
+            val v = windSpeed.value.trim().toIntOrNull() ?: return false
+            val lim = validationLimits.value
+            return lim.enabled && v > lim.windMax
+        }
+
+    val rainError: Boolean
+        get() {
+            val v = rain.value.trim().toDoubleOrNull() ?: return false
+            val lim = validationLimits.value
+            return lim.enabled && v > lim.rainMax
+        }
+
     fun setDarkTheme(enabled: Boolean) {
         isDarkTheme.value = enabled
         prefs.edit().putBoolean("dark_theme", enabled).apply()
@@ -329,6 +448,53 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
         // Aggressive update check on app launch
         checkForUpdates(isManual = false)
 
+        // Load 800mb meteorological tables asynchronously on IO dispatcher
+        viewModelScope.launch(Dispatchers.IO) {
+            MeteorologicalCalculator800.loadTables(getApplication())
+        }
+
+        // Reactive 800mb Psychrometric Calculation (Dry Bulb + Wet Bulb -> Dew Point, RH%, VP)
+        viewModelScope.launch {
+            snapshotFlow { dryBulb.value to wetBulb.value }
+                .collectLatest { (dbStr, wbStr) ->
+                    if (isLoadingRecord) return@collectLatest
+                    val db = dbStr.trim().toDoubleOrNull()
+                    val wb = wbStr.trim().toDoubleOrNull()
+                    if (db != null && wb != null && wb <= db) {
+                        if (MeteorologicalCalculator800.isLoaded) {
+                            val res = MeteorologicalCalculator800.calculatePsychrometrics(db, wb)
+                            if (res.dewPoint != null) {
+                                dewPoint.value = String.format(Locale.US, "%.1f", res.dewPoint)
+                            }
+                            if (res.rh != null) {
+                                rh.value = res.rh.roundToInt().toString()
+                            }
+                            if (res.vp != null) {
+                                vapourPressure.value = String.format(Locale.US, "%.2f", res.vp)
+                            }
+                        }
+                    }
+                }
+        }
+
+        // Reactive 800mb Barometric Reduction (Dry Bulb + SLP -> MSLP)
+        viewModelScope.launch {
+            snapshotFlow { dryBulb.value to slp.value }
+                .collectLatest { (dbStr, slpStr) ->
+                    if (isLoadingRecord) return@collectLatest
+                    val db = dbStr.trim().toDoubleOrNull()
+                    val s = slpStr.trim().toDoubleOrNull()
+                    if (db != null && s != null) {
+                        if (MeteorologicalCalculator800.isLoaded) {
+                            val mslpVal = MeteorologicalCalculator800.calculateMslp(db, s)
+                            if (mslpVal != null) {
+                                mslp.value = String.format(Locale.US, "%.1f", mslpVal)
+                            }
+                        }
+                    }
+                }
+        }
+
         // Clock ticker: while the hour is AUTO, keep nowMillis fresh so the
         // auto-snap hour follows the device clock (every 30 s).
         viewModelScope.launch {
@@ -369,6 +535,7 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- Record navigation ----------
     fun loadRecord(e: WeatherObservationEntity) {
+        isLoadingRecord = true
         dryBulb.value = e.dryBulbC
         wetBulb.value = e.wetBulbC
         dewPoint.value = e.dewPointC
@@ -399,10 +566,12 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
         manualDate.value = e.dateUtc
         editingId.value = e.id
         editingDate.value = e.dateUtc
+        isLoadingRecord = false
         lastSavedSignature = currentSignature()
     }
 
     fun clearSheet() {
+        isLoadingRecord = true
         listOf(
             dryBulb, wetBulb, dewPoint, rh, vapourPressure,
             windSpeed, windDirection, totalCloud, visibility,
@@ -418,6 +587,7 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
         editingDate.value = null
         lastSavedSignature = null
         saveStatus.value = null
+        isLoadingRecord = false
         nowMillis.value = System.currentTimeMillis()
     }
 

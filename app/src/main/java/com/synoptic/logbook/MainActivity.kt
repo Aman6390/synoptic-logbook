@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -172,6 +173,16 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
 
+                                NavigationDrawerItem(
+                                    label = { Text("Validation limits") },
+                                    icon = { Icon(Icons.Filled.Settings, contentDescription = "Validation limits") },
+                                    selected = false,
+                                    onClick = {
+                                        scope.launch { drawerState.close() }
+                                        vm.showLimitsDialog.value = true
+                                    }
+                                )
+
                                 Divider(modifier = Modifier.padding(vertical = 8.dp))
 
                                 // Check for updates option in settings
@@ -286,6 +297,18 @@ class MainActivity : ComponentActivity() {
                                     Text("Later")
                                 }
                             }
+                        )
+                    }
+
+                    // Validation & Limits Dialog
+                    if (vm.showLimitsDialog.value) {
+                        ValidationLimitsDialog(
+                            limits = vm.validationLimits.value,
+                            onSave = { newLimits ->
+                                vm.updateLimits(newLimits)
+                                vm.showLimitsDialog.value = false
+                            },
+                            onDismiss = { vm.showLimitsDialog.value = false }
                         )
                     }
                 }
@@ -439,8 +462,8 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
         // ---------------- SECTION 1 ----------------
         SectionCard(title = "SURFACE OBSERVATION") {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                DecimalField("Dry bulb", dryBulb, Modifier.weight(1f), link(FKey.DRY))
-                DecimalField("Wet bulb", wetBulb, Modifier.weight(1f), link(FKey.WET))
+                DecimalField("Dry bulb", dryBulb, Modifier.weight(1f), link(FKey.DRY), isError = vm.dryBulbError)
+                DecimalField("Wet bulb", wetBulb, Modifier.weight(1f), link(FKey.WET), isError = vm.wetBulbError)
                 DecimalField("Dew pt", dewPoint, Modifier.weight(1f), link(FKey.DEW))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -449,7 +472,7 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
                 VisibilityField(visibility, Modifier.weight(1f), link(FKey.VIS))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                IntegerField("Wind kt", windSpeed, Modifier.weight(1f), link(FKey.WIND_SPEED))
+                IntegerField("Wind kt", windSpeed, Modifier.weight(1f), link(FKey.WIND_SPEED), isError = vm.windSpeedError)
                 PickerField(
                     "Wind dir", windDirection, Modifier.weight(1f), link(FKey.WIND_DIR)
                 ) {
@@ -480,8 +503,8 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
         // ---------------- SECTION 2 ----------------
         SectionCard(title = "PRESSURE (hPa)") {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                DecimalField("SLP", slp, Modifier.weight(1f), link(FKey.SLP))
-                DecimalField("Past SLP", pastSlp, Modifier.weight(1f), link(FKey.PAST_SLP))
+                DecimalField("SLP", slp, Modifier.weight(1f), link(FKey.SLP), isError = vm.slpError)
+                DecimalField("Past SLP", pastSlp, Modifier.weight(1f), link(FKey.PAST_SLP), isError = vm.pastSlpError)
                 OutlinedTextField(
                     value = pressureChange,
                     onValueChange = {},
@@ -499,10 +522,10 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
         if (isMainSynoptic) {
             SectionCard(title = "MAX / MIN TEMPS (°C)") {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    DecimalField("Max", maxTemp, Modifier.weight(1f), link(FKey.MAX))
-                    DecimalField("Max set", maxTempAfterSet, Modifier.weight(1f), link(FKey.MAX_SET))
-                    DecimalField("Min", minTemp, Modifier.weight(1f), link(FKey.MIN))
-                    DecimalField("Min set", minTempAfterSet, Modifier.weight(1f), link(FKey.MIN_SET))
+                    DecimalField("Max", maxTemp, Modifier.weight(1f), link(FKey.MAX), isError = vm.maxTempError)
+                    DecimalField("Max set", maxTempAfterSet, Modifier.weight(1f), link(FKey.MAX_SET), isError = vm.maxTempSetError)
+                    DecimalField("Min", minTemp, Modifier.weight(1f), link(FKey.MIN), isError = vm.minTempError)
+                    DecimalField("Min set", minTempAfterSet, Modifier.weight(1f), link(FKey.MIN_SET), isError = vm.minTempSetError)
                 }
             }
         }
@@ -510,7 +533,7 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
         // ---------------- SECTION 4 ----------------
         SectionCard(title = "RAIN & GROUND") {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                DecimalField("Rain (mm)", rain, Modifier.weight(1f), link(FKey.RAIN))
+                DecimalField("Rain (mm)", rain, Modifier.weight(1f), link(FKey.RAIN), isError = vm.rainError)
                 PickerField("Ground", ground, Modifier.weight(1f), link(FKey.GROUND)) {
                     showGroundPicker.value = true
                 }
@@ -814,7 +837,8 @@ private fun DecimalField(
     label: String,
     state: MutableState<String>,
     modifier: Modifier = Modifier,
-    focusLink: Pair<FocusRequester?, (() -> Unit)?>? = null
+    focusLink: Pair<FocusRequester?, (() -> Unit)?>? = null,
+    isError: Boolean = false
 ) {
     val fm = LocalFocusManager.current
     OutlinedTextField(
@@ -825,6 +849,7 @@ private fun DecimalField(
         label = { Text(label) },
         singleLine = true,
         textStyle = CellTextStyle,
+        isError = isError,
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Decimal,
             imeAction = if (focusLink?.second != null) ImeAction.Next else ImeAction.Done
@@ -845,7 +870,8 @@ private fun IntegerField(
     label: String,
     state: MutableState<String>,
     modifier: Modifier = Modifier,
-    focusLink: Pair<FocusRequester?, (() -> Unit)?>? = null
+    focusLink: Pair<FocusRequester?, (() -> Unit)?>? = null,
+    isError: Boolean = false
 ) {
     val fm = LocalFocusManager.current
     OutlinedTextField(
@@ -857,6 +883,7 @@ private fun IntegerField(
         label = { Text(label) },
         singleLine = true,
         textStyle = CellTextStyle,
+        isError = isError,
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Text,
             autoCorrect = false,
@@ -1112,6 +1139,185 @@ fun formatDisplayDate(dateUtc: String): String {
     val month = dateUtc.substring(2, 4)
     val year = dateUtc.substring(4, 8)
     return "$day/$month/$year"
+}
+
+@Composable
+private fun ValidationLimitsDialog(
+    limits: ValidationLimits,
+    onSave: (ValidationLimits) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val enabledState = remember { mutableStateOf(limits.enabled) }
+    val dbMinState = remember { mutableStateOf(limits.dbMin.toString()) }
+    val dbMaxState = remember { mutableStateOf(limits.dbMax.toString()) }
+    val wbMinState = remember { mutableStateOf(limits.wbMin.toString()) }
+    val wbMaxState = remember { mutableStateOf(limits.wbMax.toString()) }
+    val slpMinState = remember { mutableStateOf(limits.slpMin.toString()) }
+    val slpMaxState = remember { mutableStateOf(limits.slpMax.toString()) }
+    val windMaxState = remember { mutableStateOf(limits.windMax.toString()) }
+    val rainMaxState = remember { mutableStateOf(limits.rainMax.toString()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Validation limits") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Enable Limit Warnings",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Switch(
+                        checked = enabledState.value,
+                        onCheckedChange = { enabledState.value = it }
+                    )
+                }
+
+                Text(
+                    "Subtle red borders will outline fields when values exceed these limits or violate meteorological sanity checks (e.g. Wet Bulb > Dry Bulb, Max < Dry Bulb, Max ≤ Min).",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (enabledState.value) {
+                    Divider()
+                    Text("Dry Bulb Range (°C)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = dbMinState.value,
+                            onValueChange = { dbMinState.value = it },
+                            label = { Text("Min") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                        )
+                        OutlinedTextField(
+                            value = dbMaxState.value,
+                            onValueChange = { dbMaxState.value = it },
+                            label = { Text("Max") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                        )
+                    }
+
+                    Text("Wet Bulb Range (°C)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = wbMinState.value,
+                            onValueChange = { wbMinState.value = it },
+                            label = { Text("Min") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                        )
+                        OutlinedTextField(
+                            value = wbMaxState.value,
+                            onValueChange = { wbMaxState.value = it },
+                            label = { Text("Max") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                        )
+                    }
+
+                    Text("Surface Pressure Range (hPa)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = slpMinState.value,
+                            onValueChange = { slpMinState.value = it },
+                            label = { Text("Min") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                        )
+                        OutlinedTextField(
+                            value = slpMaxState.value,
+                            onValueChange = { slpMaxState.value = it },
+                            label = { Text("Max") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = windMaxState.value,
+                            onValueChange = { windMaxState.value = it.filter { c -> c.isDigit() } },
+                            label = { Text("Max Wind (kt)") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                        OutlinedTextField(
+                            value = rainMaxState.value,
+                            onValueChange = { rainMaxState.value = it },
+                            label = { Text("Max Rain (mm)") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                        )
+                    }
+
+                    TextButton(
+                        onClick = {
+                            val def = ValidationLimits.DEFAULT
+                            enabledState.value = def.enabled
+                            dbMinState.value = def.dbMin.toString()
+                            dbMaxState.value = def.dbMax.toString()
+                            wbMinState.value = def.wbMin.toString()
+                            wbMaxState.value = def.wbMax.toString()
+                            slpMinState.value = def.slpMin.toString()
+                            slpMaxState.value = def.slpMax.toString()
+                            windMaxState.value = def.windMax.toString()
+                            rainMaxState.value = def.rainMax.toString()
+                        },
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("Reset to Defaults", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val def = ValidationLimits.DEFAULT
+                    val newLimits = ValidationLimits(
+                        enabled = enabledState.value,
+                        dbMin = dbMinState.value.toDoubleOrNull() ?: def.dbMin,
+                        dbMax = dbMaxState.value.toDoubleOrNull() ?: def.dbMax,
+                        wbMin = wbMinState.value.toDoubleOrNull() ?: def.wbMin,
+                        wbMax = wbMaxState.value.toDoubleOrNull() ?: def.wbMax,
+                        slpMin = slpMinState.value.toDoubleOrNull() ?: def.slpMin,
+                        slpMax = slpMaxState.value.toDoubleOrNull() ?: def.slpMax,
+                        windMax = windMaxState.value.toIntOrNull() ?: def.windMax,
+                        rainMax = rainMaxState.value.toDoubleOrNull() ?: def.rainMax
+                    )
+                    onSave(newLimits)
+                }
+            ) {
+                Text("Save", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 // ---------------------------------------------------------------------------
