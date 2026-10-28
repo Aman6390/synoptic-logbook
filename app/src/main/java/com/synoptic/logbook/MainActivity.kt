@@ -72,6 +72,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
 import kotlinx.coroutines.launch
 
 // ---------------------------------------------------------------------------
@@ -550,10 +553,14 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
             autoHour = autoHour,
             selectedHour = selectedHour,
             isAuto = isAuto,
-            onPick = { picked ->
-                manualHour.value = picked
-                if (picked == null) nowMillis.value = System.currentTimeMillis()
+            selectedDate = vm.selectedDate,
+            isAutoDate = vm.isAutoDate,
+            onPickHour = { picked ->
+                vm.selectHour(picked)
                 showHourPicker.value = false
+            },
+            onPickDate = { pickedDate ->
+                vm.setManualDate(pickedDate)
             },
             onDismiss = { showHourPicker.value = false }
         )
@@ -1034,23 +1041,89 @@ private fun HourPickerDialog(
     autoHour: String,
     selectedHour: String,
     isAuto: Boolean,
-    onPick: (String?) -> Unit,
+    selectedDate: String,
+    isAutoDate: Boolean,
+    onPickHour: (String?) -> Unit,
+    onPickDate: (String?) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Observation hour (UTC)") },
+        title = { Text("Observation time & date (UTC)") },
         text = {
             Column(
                 Modifier
-                    .heightIn(max = 380.dp)
+                    .heightIn(max = 440.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                TextButton(onClick = { onPick(null) }, modifier = Modifier.fillMaxWidth()) {
+                // Historical Date Selector Card
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                ) {
+                    Column(Modifier.padding(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    "Date (UTC)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    formatDisplayDate(selectedDate),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            TextButton(
+                                onClick = {
+                                    val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+                                    val d = selectedDate.take(2).toIntOrNull() ?: cal.get(Calendar.DAY_OF_MONTH)
+                                    val m = (selectedDate.drop(2).take(2).toIntOrNull() ?: (cal.get(Calendar.MONTH) + 1)) - 1
+                                    val y = selectedDate.takeLast(4).toIntOrNull() ?: cal.get(Calendar.YEAR)
+
+                                    android.app.DatePickerDialog(
+                                        context,
+                                        { _, year, month, dayOfMonth ->
+                                            val picked = String.format(Locale.US, "%02d%02d%04d", dayOfMonth, month + 1, year)
+                                            onPickDate(picked)
+                                        },
+                                        y, m, d
+                                    ).show()
+                                }
+                            ) {
+                                Text("Change Date")
+                            }
+                        }
+                        if (!isAutoDate) {
+                            TextButton(
+                                onClick = { onPickDate(null) },
+                                modifier = Modifier.align(Alignment.End)
+                            ) {
+                                Text("Reset to Today", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+
+                Text(
+                    "Synoptic Hour",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+
+                TextButton(onClick = { onPickHour(null) }, modifier = Modifier.fillMaxWidth()) {
                     Text((if (isAuto) "● " else "") + "Auto — follow device clock (now: $autoHour UTC)")
                 }
                 SYNOPTIC_HOURS.forEach { h ->
-                    TextButton(onClick = { onPick(h) }, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = { onPickHour(h) }, modifier = Modifier.fillMaxWidth()) {
                         Text((if (!isAuto && h == selectedHour) "● " else "") + "$h UTC")
                     }
                 }
@@ -1059,6 +1132,14 @@ private fun HourPickerDialog(
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
     )
+}
+
+fun formatDisplayDate(dateUtc: String): String {
+    if (dateUtc.length != 8) return dateUtc
+    val day = dateUtc.substring(0, 2)
+    val month = dateUtc.substring(2, 4)
+    val year = dateUtc.substring(4, 8)
+    return "$day/$month/$year"
 }
 
 // ---------------------------------------------------------------------------

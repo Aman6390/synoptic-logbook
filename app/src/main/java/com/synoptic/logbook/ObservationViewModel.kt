@@ -64,11 +64,13 @@ fun todayUtc(millis: Long): String {
     )
 }
 
-/** a - b formatted to exactly 1 decimal place, e.g. "3.3". Empty while either input is missing. */
+/** a - b formatted to exactly 1 decimal place with meteorological tendency sign (e.g. "+1.2", "-0.8", "0.0"). Empty while either input is missing. */
 fun formatDifference(a: String, b: String): String {
     val x = a.trim().toDoubleOrNull() ?: return ""
     val y = b.trim().toDoubleOrNull() ?: return ""
-    return String.format(Locale.US, "%.1f", x - y)
+    val diff = x - y
+    return if (diff > 0.0) String.format(Locale.US, "+%.1f", diff)
+           else String.format(Locale.US, "%.1f", diff)
 }
 
 // ---------------------------------------------------------------------------
@@ -82,8 +84,9 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
 
     private val dao = AppDatabase.getInstance(app).observationDao()
 
-    // ---------- Top capsule: synoptic hour (AUTO by default, tap for manual) ----------
+    // ---------- Top capsule: synoptic hour & date ----------
     val manualHour = mutableStateOf<String?>(null)
+    val manualDate = mutableStateOf<String?>(null)
     val showHourPicker = mutableStateOf(false)
     val nowMillis = mutableStateOf(System.currentTimeMillis())
 
@@ -148,6 +151,22 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
     val autoHour: String get() = synopticHourFor(nowMillis.value)
     val isAuto: Boolean get() = manualHour.value == null
     val selectedHour: String get() = manualHour.value ?: autoHour
+    val isAutoDate: Boolean get() = manualDate.value == null
+    val selectedDate: String get() = manualDate.value ?: editingDate.value ?: observationDateUtc(nowMillis.value)
+
+    var lastSavedSignature: String? = null
+
+    fun currentSignature(): String {
+        val fields = listOf(
+            dryBulb, wetBulb, dewPoint, rh, vapourPressure,
+            windSpeed, windDirection, totalCloud, visibility,
+            lowCloudType, mediumCloudType, highCloudType,
+            lowCloudAmount, mediumCloudAmount, highCloudAmount,
+            slp, pastSlp, mslp, maxTemp, maxTempAfterSet,
+            minTemp, minTempAfterSet, rain, ground, evaporation, waterTemp
+        )
+        return fields.joinToString("\u0000") { it.value } + "\u0000" + selectedHour + "\u0000" + selectedDate
+    }
 
     // Main synoptic hours: the only slots where max/min temps and
     // evaporation/water readings are taken (Sections 3 & 5).
@@ -282,6 +301,7 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
         // written once typing pauses — not on every keystroke.
         viewModelScope.launch {
             snapshotFlow {
+                val sig = currentSignature()
                 val fields = listOf(
                     dryBulb, wetBulb, dewPoint, rh, vapourPressure,
                     windSpeed, windDirection, totalCloud, visibility,
@@ -290,12 +310,12 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
                     slp, pastSlp, mslp, maxTemp, maxTempAfterSet,
                     minTemp, minTempAfterSet, rain, ground, evaporation, waterTemp
                 )
-                val signature = fields.joinToString("\u0000") { it.value } + "\u0000" + selectedHour
-                signature to fields.any { it.value.isNotBlank() }
+                sig to fields.any { it.value.isNotBlank() }
             }
                 .drop(1) // ignore the values captured at startup
-                .collectLatest { (_, hasData) ->
+                .collectLatest { (signature, hasData) ->
                     if (!hasData) return@collectLatest // never persist a blank sheet
+                    if (signature == lastSavedSignature) return@collectLatest // skip if unchanged
                     delay(500)                        // debounce
                     doSave()
                 }
@@ -331,8 +351,10 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
         evaporation.value = e.evaporationMm
         waterTemp.value = e.waterTempC
         manualHour.value = e.synopticHourUtc
+        manualDate.value = e.dateUtc
         editingId.value = e.id
         editingDate.value = e.dateUtc
+        lastSavedSignature = currentSignature()
     }
 
     fun clearSheet() {
@@ -346,10 +368,45 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
             rain, ground, evaporation, waterTemp
         ).forEach { it.value = "" }
         manualHour.value = null
+        manualDate.value = null
         editingId.value = null
         editingDate.value = null
+        lastSavedSignature = null
         saveStatus.value = null
         nowMillis.value = System.currentTimeMillis()
+    }
+
+    fun selectHour(hour: String?) {
+        manualHour.value = hour
+        if (hour == null) nowMillis.value = System.currentTimeMillis()
+        viewModelScope.launch {
+            val targetDate = selectedDate
+            val existing = dao.findByDateAndHour(targetDate, selectedHour)
+            if (existing != null) {
+                viewIndex.value = records.value.indexOfFirst { it.id == existing.id }.takeIf { it >= 0 }
+                loadRecord(existing)
+            } else if (editingId.value != null) {
+                editingId.value = null
+                editingDate.value = targetDate
+                lastSavedSignature = null
+            }
+        }
+    }
+
+    fun setManualDate(dateUtc: String?) {
+        manualDate.value = dateUtc
+        viewModelScope.launch {
+            val targetDate = selectedDate
+            val existing = dao.findByDateAndHour(targetDate, selectedHour)
+            if (existing != null) {
+                viewIndex.value = records.value.indexOfFirst { it.id == existing.id }.takeIf { it >= 0 }
+                loadRecord(existing)
+            } else if (editingId.value != null) {
+                editingId.value = null
+                editingDate.value = targetDate
+                lastSavedSignature = null
+            }
+        }
     }
 
     fun goOlder() {
@@ -377,20 +434,14 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
             saving.value = true
             saveStatus.value = "Saving…"
             try {
-                // Duplicate-guard (Date ddMMyyyy + UTC hour rule): resolve the
-                // canonical record for this date+hour BEFORE writing. If one
-                // exists we attach to its id (update); if not, the insert below
-                // creates it and we attach the returned rowId so every
-                // subsequent auto-save on this sheet is an UPDATE.
-                val sheetDate = editingDate.value ?: observationDateUtc(nowMillis.value)
-                if (editingId.value == null) {
-                    val existing = dao.findByDateAndHour(sheetDate, selectedHour)
-                    if (existing != null) {
-                        editingId.value = existing.id
-                        editingDate.value = existing.dateUtc
-                    }
+                val sheetDate = selectedDate
+                val existing = dao.findByDateAndHour(sheetDate, selectedHour)
+                val targetId = when {
+                    existing != null -> existing.id
+                    editingDate.value == sheetDate && manualHour.value == selectedHour -> editingId.value ?: 0L
+                    else -> 0L
                 }
-                // Hidden-temps guard: sections 3 & 5 only apply at 0300/1200 UTC.
+
                 // Hidden-temps guard: sections 3 & 5 only apply at 0300/1200 UTC.
                 val maxTempV = if (isMainSynoptic) maxTemp.value else ""
                 val maxTempAfterSetV = if (isMainSynoptic) maxTempAfterSet.value else ""
@@ -398,9 +449,10 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
                 val minTempAfterSetV = if (isMainSynoptic) minTempAfterSet.value else ""
                 val evaporationV = if (isMainSynoptic) evaporation.value else ""
                 val waterTempV = if (isMainSynoptic) waterTemp.value else ""
+
                 val savedId = dao.insert(
                     WeatherObservationEntity(
-                        id = editingId.value ?: 0L,
+                        id = targetId,
                         dateUtc = sheetDate,
                         synopticHourUtc = selectedHour,
                         dryBulbC = dryBulb.value,
@@ -432,12 +484,10 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
                         waterTempC = waterTempV
                     )
                 )
-                // Attach to the saved row so subsequent auto-saves on this
-                // sheet act as UPDATES (edit-in-place, never a twin record).
                 editingId.value = savedId
                 editingDate.value = sheetDate
-                // Notepad mode: data STAYS on screen. If we were editing a
-                // loaded record, the sheet stays attached to it (overwritten).
+                lastSavedSignature = currentSignature()
+
                 val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
                 val t = String.format(
                     Locale.US, "%02d:%02d",
