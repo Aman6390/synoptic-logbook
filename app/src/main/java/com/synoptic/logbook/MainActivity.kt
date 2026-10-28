@@ -391,8 +391,16 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                IconButton(onClick = onMenuClick) {
-                    Icon(Icons.Filled.Menu, contentDescription = "Open menu")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onMenuClick) {
+                        Icon(Icons.Filled.Menu, contentDescription = "Open menu")
+                    }
+                    IconButton(
+                        onClick = { vm.showDeleteConfirm.value = true },
+                        enabled = editingId.value != null // only when a saved record is attached
+                    ) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Delete this observation")
+                    }
                 }
             }
             SynopticHourCapsule(
@@ -402,12 +410,6 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
             )
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = { vm.showDeleteConfirm.value = true },
-                        enabled = editingId.value != null // only when a saved record is attached
-                    ) {
-                        Icon(Icons.Filled.Delete, contentDescription = "Delete this observation")
-                    }
                     IconButton(onClick = { vm.goOlder() }, enabled = canGoOlder) {
                         Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "Older entry")
                     }
