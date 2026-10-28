@@ -21,6 +21,10 @@ interface ObservationDao {
     @Query("DELETE FROM observations WHERE id = :id")
     suspend fun deleteById(id: Long)
 
-    @Query("SELECT * FROM observations ORDER BY id DESC")
+    /** Chronological observation ordering (newest first). */
+    @Query("""
+        SELECT * FROM observations 
+        ORDER BY (substr(dateUtc, 5, 4) || substr(dateUtc, 3, 2) || substr(dateUtc, 1, 2) || synopticHourUtc) DESC, id DESC
+    """)
     fun observeAll(): Flow<List<WeatherObservationEntity>>
 }

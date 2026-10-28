@@ -2,6 +2,9 @@ package com.synoptic.logbook
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
@@ -197,12 +200,54 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
         get() = viewIndex.value != null
 
     // ---------- Navigation + theme (Milestone 7) ----------
+    private val prefs = app.getSharedPreferences("synoptic_prefs", Context.MODE_PRIVATE)
     val currentScreen = mutableStateOf(AppScreen.FORM)
-    val isDarkTheme = mutableStateOf(false)
+    val isDarkTheme = mutableStateOf(prefs.getBoolean("dark_theme", false))
+
+    fun setDarkTheme(enabled: Boolean) {
+        isDarkTheme.value = enabled
+        prefs.edit().putBoolean("dark_theme", enabled).apply()
+    }
 
     fun openHistory() { currentScreen.value = AppScreen.HISTORY }
 
     fun openForm() { currentScreen.value = AppScreen.FORM }
+
+    /** Exports all saved observations to a standard CSV file and triggers the Android share sheet. */
+    fun exportCsv(context: Context) {
+        viewModelScope.launch {
+            val list = records.value
+            if (list.isEmpty()) return@launch
+
+            val header = "ID,Date_UTC,Hour_UTC,DryBulb_C,WetBulb_C,DewPoint_C,RH_Pct,VapourPressure,WindSpeed_kt,WindDir,TotalCloud,Visibility,LowCloudType,MedCloudType,HighCloudType,LowCloudOkta,MedCloudOkta,HighCloudOkta,SLP_hPa,PastSLP_hPa,PressureDiff,MSLP_hPa,MaxTemp_C,MaxTempSet_C,MinTemp_C,MinTempSet_C,Rain_mm,GroundCondition,Evaporation_mm,WaterTemp_C\n"
+            val rows = list.joinToString("\n") { e ->
+                listOf(
+                    e.id, e.dateUtc, e.synopticHourUtc, e.dryBulbC, e.wetBulbC, e.dewPointC,
+                    e.relativeHumidityPct, e.vapourPressure, e.windSpeedKt, "\"${e.windDirectionCode}\"",
+                    e.totalCloudAmount, e.visibilityCode, e.lowCloudType, e.mediumCloudType,
+                    e.highCloudType, e.lowCloudAmount, e.mediumCloudAmount, e.highCloudAmount,
+                    e.slp, e.pastSlp, e.pressureChange, e.mslp, e.maxTempC, e.maxTempAfterSetC,
+                    e.minTempC, e.minTempAfterSetC, e.rainMm, "\"${e.groundCondition}\"",
+                    e.evaporationMm, e.waterTempC
+                ).joinToString(",")
+            }
+
+            val file = File(context.cacheDir, "synoptic_logbook_export.csv")
+            file.writeText(header + rows)
+
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/csv"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "Synoptic Logbook Data Export")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val chooser = Intent.createChooser(shareIntent, "Export Synoptic Observations").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+        }
+    }
 
     val showDeleteConfirm = mutableStateOf(false)
 

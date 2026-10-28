@@ -2,6 +2,7 @@ package com.synoptic.logbook
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -109,6 +111,14 @@ class MainActivity : ComponentActivity() {
             val scope = rememberCoroutineScope()
             val context = LocalContext.current
 
+            // System back press / gesture navigation handlers
+            BackHandler(enabled = drawerState.isOpen) {
+                scope.launch { drawerState.close() }
+            }
+            BackHandler(enabled = vm.currentScreen.value == AppScreen.HISTORY) {
+                vm.openForm()
+            }
+
             // Light / Dark theme from the drawer toggle
             MaterialTheme(
                 colorScheme = if (vm.isDarkTheme.value) darkColorScheme() else lightColorScheme()
@@ -158,7 +168,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                     Switch(
                                         checked = vm.isDarkTheme.value,
-                                        onCheckedChange = { vm.isDarkTheme.value = it }
+                                        onCheckedChange = { vm.setDarkTheme(it) }
                                     )
                                 }
 
@@ -288,9 +298,6 @@ class MainActivity : ComponentActivity() {
 private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
     // MVVM: all state + logic lives in ObservationViewModel; this composable
     // only observes it. Aliases keep the UI body readable.
-    val context = LocalContext.current
-
-    val manualHour = vm.manualHour
     val showHourPicker = vm.showHourPicker
     val showWindPicker = vm.showWindPicker
     val showGroundPicker = vm.showGroundPicker
@@ -298,7 +305,6 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
     val showMedOktaPicker = vm.showMedOktaPicker
     val showHighOktaPicker = vm.showHighOktaPicker
     val showTotalOktaPicker = vm.showTotalOktaPicker
-    val nowMillis = vm.nowMillis
 
     val dryBulb = vm.dryBulb
     val wetBulb = vm.wetBulb
@@ -327,13 +333,11 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
     val evaporation = vm.evaporation
     val waterTemp = vm.waterTemp
 
-    val saving = vm.saving
     val saveStatus = vm.saveStatus
 
     val records = vm.records.collectAsState().value
     val viewIndex = vm.viewIndex
     val editingId = vm.editingId
-    val editingDate = vm.editingDate
 
     val autoHour = vm.autoHour
     val isAuto = vm.isAuto
@@ -653,13 +657,14 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
 @Composable
 private fun HistoryScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
     val records = vm.records.collectAsState().value
+    val context = LocalContext.current
 
     Column(
         Modifier
             .fillMaxSize()
             .padding(8.dp)
     ) {
-        // Header bar with hamburger + title + back
+        // Header bar with hamburger + title + export + back
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -673,6 +678,11 @@ private fun HistoryScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
+            if (records.isNotEmpty()) {
+                IconButton(onClick = { vm.exportCsv(context) }) {
+                    Icon(Icons.Filled.Share, contentDescription = "Export to CSV")
+                }
+            }
             IconButton(onClick = { vm.openForm() }) {
                 Icon(Icons.Filled.ArrowBack, contentDescription = "Back to form")
             }
@@ -755,7 +765,6 @@ private val CellTextStyle = TextStyle(
 @Composable
 private fun SectionCard(
     title: String,
-    helper: String? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -851,45 +860,6 @@ private fun IntegerField(
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Text,
             autoCorrect = false,
-            imeAction = if (focusLink?.second != null) ImeAction.Next else ImeAction.Done
-        ),
-        keyboardActions = KeyboardActions(
-            onNext = { focusLink?.second?.invoke() },
-            onDone = { fm.clearFocus() }
-        ),
-        modifier = modifier
-            .fillMaxWidth()
-            .then(focusLink?.first?.let { Modifier.focusRequester(it) } ?: Modifier)
-    )
-}
-
-/** Cloud amount: only 0–8 or "/". A new digit replaces the old one. */
-@Composable
-private fun AmountField(
-    label: String,
-    state: MutableState<String>,
-    modifier: Modifier = Modifier,
-    focusLink: Pair<FocusRequester?, (() -> Unit)?>? = null
-) {
-    val fm = LocalFocusManager.current
-    OutlinedTextField(
-        value = state.value,
-        onValueChange = { raw ->
-            state.value = when {
-                raw.isEmpty() -> ""
-                raw == "/" -> "/"
-                raw.length == 1 && raw[0] in '0'..'8' -> raw
-                else -> {
-                    val last = raw.takeLast(1)
-                    if (last == "/" || last[0] in '0'..'8') last else state.value
-                }
-            }
-        },
-        label = { Text(label) },
-        singleLine = true,
-        textStyle = CellTextStyle,
-        keyboardOptions = KeyboardOptions(
-            keyboardType = KeyboardType.Text,
             imeAction = if (focusLink?.second != null) ImeAction.Next else ImeAction.Done
         ),
         keyboardActions = KeyboardActions(
