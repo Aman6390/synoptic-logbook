@@ -309,13 +309,6 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
             return lim.enabled && (v < lim.slpMin || v > lim.slpMax)
         }
 
-    val windSpeedError: Boolean
-        get() {
-            val v = windSpeed.value.trim().toIntOrNull() ?: return false
-            val lim = validationLimits.value
-            return lim.enabled && v > lim.windMax
-        }
-
     val rainError: Boolean
         get() {
             val v = rain.value.trim().toDoubleOrNull() ?: return false

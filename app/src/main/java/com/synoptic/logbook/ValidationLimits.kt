@@ -11,7 +11,6 @@ data class ValidationLimits(
     val wbMax: Double = 35.0,
     val slpMin: Double = 800.0,
     val slpMax: Double = 880.0,
-    val windMax: Int = 60,
     val rainMax: Double = 300.0
 ) {
     companion object {
@@ -23,7 +22,6 @@ data class ValidationLimits(
         private const val KEY_WB_MAX = "wb_max"
         private const val KEY_SLP_MIN = "slp_min"
         private const val KEY_SLP_MAX = "slp_max"
-        private const val KEY_WIND_MAX = "wind_max"
         private const val KEY_RAIN_MAX = "rain_max"
 
         val DEFAULT = ValidationLimits()
@@ -38,7 +36,6 @@ data class ValidationLimits(
                 wbMax = prefs.getFloat(KEY_WB_MAX, 35.0f).toDouble(),
                 slpMin = prefs.getFloat(KEY_SLP_MIN, 800.0f).toDouble(),
                 slpMax = prefs.getFloat(KEY_SLP_MAX, 880.0f).toDouble(),
-                windMax = prefs.getInt(KEY_WIND_MAX, 60),
                 rainMax = prefs.getFloat(KEY_RAIN_MAX, 300.0f).toDouble()
             )
         }
@@ -53,7 +50,6 @@ data class ValidationLimits(
                 .putFloat(KEY_WB_MAX, limits.wbMax.toFloat())
                 .putFloat(KEY_SLP_MIN, limits.slpMin.toFloat())
                 .putFloat(KEY_SLP_MAX, limits.slpMax.toFloat())
-                .putInt(KEY_WIND_MAX, limits.windMax)
                 .putFloat(KEY_RAIN_MAX, limits.rainMax.toFloat())
                 .apply()
         }

@@ -472,7 +472,7 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
                 VisibilityField(visibility, Modifier.weight(1f), link(FKey.VIS))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                IntegerField("Wind kt", windSpeed, Modifier.weight(1f), link(FKey.WIND_SPEED), isError = vm.windSpeedError)
+                IntegerField("Wind kt", windSpeed, Modifier.weight(1f), link(FKey.WIND_SPEED))
                 PickerField(
                     "Wind dir", windDirection, Modifier.weight(1f), link(FKey.WIND_DIR)
                 ) {
@@ -1154,7 +1154,6 @@ private fun ValidationLimitsDialog(
     val wbMaxState = remember { mutableStateOf(limits.wbMax.toString()) }
     val slpMinState = remember { mutableStateOf(limits.slpMin.toString()) }
     val slpMaxState = remember { mutableStateOf(limits.slpMax.toString()) }
-    val windMaxState = remember { mutableStateOf(limits.windMax.toString()) }
     val rainMaxState = remember { mutableStateOf(limits.rainMax.toString()) }
 
     AlertDialog(
@@ -1252,24 +1251,14 @@ private fun ValidationLimitsDialog(
                         )
                     }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = windMaxState.value,
-                            onValueChange = { windMaxState.value = it.filter { c -> c.isDigit() } },
-                            label = { Text("Max Wind (kt)") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                        )
-                        OutlinedTextField(
-                            value = rainMaxState.value,
-                            onValueChange = { rainMaxState.value = it },
-                            label = { Text("Max Rain (mm)") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                        )
-                    }
+                    OutlinedTextField(
+                        value = rainMaxState.value,
+                        onValueChange = { rainMaxState.value = it },
+                        label = { Text("Max Rain (mm)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
 
                     TextButton(
                         onClick = {
@@ -1281,7 +1270,6 @@ private fun ValidationLimitsDialog(
                             wbMaxState.value = def.wbMax.toString()
                             slpMinState.value = def.slpMin.toString()
                             slpMaxState.value = def.slpMax.toString()
-                            windMaxState.value = def.windMax.toString()
                             rainMaxState.value = def.rainMax.toString()
                         },
                         modifier = Modifier.align(Alignment.End)
@@ -1303,7 +1291,6 @@ private fun ValidationLimitsDialog(
                         wbMax = wbMaxState.value.toDoubleOrNull() ?: def.wbMax,
                         slpMin = slpMinState.value.toDoubleOrNull() ?: def.slpMin,
                         slpMax = slpMaxState.value.toDoubleOrNull() ?: def.slpMax,
-                        windMax = windMaxState.value.toIntOrNull() ?: def.windMax,
                         rainMax = rainMaxState.value.toDoubleOrNull() ?: def.rainMax
                     )
                     onSave(newLimits)
