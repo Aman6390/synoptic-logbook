@@ -12,8 +12,17 @@ android {
         applicationId = "com.synoptic.logbook"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.0.2"
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file("synoptic_release.jks")
+            storePassword = "synoptic123"
+            keyAlias = "synoptic"
+            keyPassword = "synoptic123"
+        }
     }
 
     buildTypes {
@@ -23,7 +32,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
