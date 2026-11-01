@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synoptic Logbook - Apple Design System Visual Verification</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-midnight: #0B0F19;
+            --surface-midnight: #131B2A;
+            --surface-variant-midnight: #1C273D;
+            --border-midnight: #263550;
+            --text-primary-midnight: #F0F4F8;
+            --text-secondary-midnight: #8E9BAE;
+            
+            --bg-snow: #F2F4F8;
+            --surface-snow: #FFFFFF;
+            --surface-variant-snow: #E8EDF4;
+            --border-snow: #D5DCE6;
+            --text-primary-snow: #141923;
+            --text-secondary-snow: #657084;
+
+            --apple-blue: #2997FF;
+            --apple-blue-light: #007AFF;
+            --apple-coral: #FF453A;
+            --apple-green: #30D158;
+            --apple-pill-bg: #162D4A;
+            --apple-pill-text: #8EC2FF;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            background-color: #060911;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", sans-serif;
+            color: var(--text-primary-midnight);
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .header-suite {
+            text-align: center;
+            margin-bottom: 30px;
+            max-width: 900px;
+        }
+
+        .suite-tag {
+            display: inline-block;
+            background: rgba(41, 151, 255, 0.15);
+            color: var(--apple-blue);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(41, 151, 255, 0.3);
+            margin-bottom: 12px;
+        }
+
+        .suite-title {
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            color: #FFFFFF;
+            margin-bottom: 8px;
+        }
+
+        .suite-sub {
+            font-size: 14px;
+            color: var(--text-secondary-midnight);
+        }
+
+        /* Layout Grid for Desktop Inspection */
+        .viewport-showcase {
+            display: grid;
+            grid-template-columns: 420px 420px;
+            gap: 32px;
+            justify-content: center;
+            width: 100%;
+            max-width: 920px;
+        }
+
+        .phone-frame {
+            border-radius: 36px;
+            padding: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .dark-frame {
+            background-color: var(--bg-midnight);
+            color: var(--text-primary-midnight);
+        }
+
+        .light-frame {
+            background-color: var(--bg-snow);
+            color: var(--text-primary-snow);
+            border: 1px solid #D5DCE6;
+        }
+
+        .frame-header-label {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            opacity: 0.8;
+            padding: 0 4px;
+        }
+
+        /* Top Bar & Pill Capsule */
+        .top-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .nav-icon-group {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .icon-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            color: inherit;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .dark-frame .icon-btn:hover { background: rgba(255, 255, 255, 0.08); }
+        .light-frame .icon-btn:hover { background: rgba(0, 0, 0, 0.05); }
+
+        .time-capsule {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            user-select: none;
+        }
+
+        .dark-frame .time-capsule {
+            background: var(--apple-pill-bg);
+            border: 1px solid rgba(41, 151, 255, 0.4);
+            color: var(--apple-pill-text);
+        }
+
+        .light-frame .time-capsule {
+            background: #E1EFFF;
+            border: 1px solid rgba(0, 122, 255, 0.3);
+            color: #004EA3;
+        }
+
+        .capsule-hour {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .capsule-badge {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            padding: 2px 6px;
+            border-radius: 20px;
+        }
+
+        .dark-frame .capsule-badge {
+            background: rgba(41, 151, 255, 0.25);
+            color: var(--apple-blue);
+        }
+
+        .light-frame .capsule-badge {
+            background: rgba(0, 122, 255, 0.18);
+            color: #007AFF;
+        }
+
+        .pos-label {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        .save-status-text {
+            font-size: 11px;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .dark-frame .save-status-text { color: var(--text-secondary-midnight); }
+        .light-frame .save-status-text { color: var(--text-secondary-snow); }
+
+        /* Inset Grouped Section Cards */
+        .section-card {
+            border-radius: 16px;
+            padding: 8px 10px;
+            margin-bottom: 7px;
+            transition: all 0.25s ease;
+        }
+
+        .dark-frame .section-card {
+            background: var(--surface-midnight);
+            border: 1px solid rgba(38, 53, 80, 0.65);
+        }
+
+        .light-frame .section-card {
+            background: var(--surface-snow);
+            border: 1px solid var(--border-snow);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+        }
+
+        .section-title {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .dark-frame .section-title { color: rgba(41, 151, 255, 0.9); }
+        .light-frame .section-title { color: #007AFF; }
+
+        .fields-row {
+            display: grid;
+            grid-gap: 6px;
+            margin-bottom: 5px;
+        }
+
+        .fields-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .col-2 { grid-template-columns: 1fr 1fr; }
+        .col-3 { grid-template-columns: 1fr 1fr 1fr; }
+        .col-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+        /* Apple Styled Input Cells */
+        .input-cell {
+            position: relative;
+            border-radius: 10px;
+            padding: 5px 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 46px;
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+
+        .dark-frame .input-cell {
+            background: rgba(28, 39, 61, 0.35);
+            border: 1px solid rgba(38, 53, 80, 0.7);
+        }
+
+        .light-frame .input-cell {
+            background: rgba(232, 237, 244, 0.4);
+            border: 1px solid #D5DCE6;
+        }
+
+        .input-cell.error {
+            border-color: var(--apple-coral) !important;
+            background: rgba(255, 69, 58, 0.08) !important;
+        }
+
+        .input-label {
+            font-size: 9.5px;
+            font-weight: 500;
+            line-height: 1;
+            margin-bottom: 3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .dark-frame .input-label { color: var(--text-secondary-midnight); }
+        .light-frame .input-label { color: var(--text-secondary-snow); }
+
+        .input-cell.error .input-label {
+            color: var(--apple-coral);
+            font-weight: 600;
+        }
+
+        .input-value {
+            font-size: 13.5px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            line-height: 1.2;
+            font-feature-settings: "tnum" on, "lnum" on;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .input-value.empty {
+            opacity: 0.35;
+        }
+
+        .diff-cell {
+            color: var(--apple-green);
+            font-weight: 700;
+        }
+
+        /* SVG Icons */
+        svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header-suite">
+        <span class="suite-tag">Apple HIG Refactored Layout</span>
+        <h1 class="suite-title">Synoptic Logbook Design Verification</h1>
+        <p class="suite-sub">Phase 3 Autonomous Playwright Inspection: Atmospheric Inset Grouped Architecture</p>
+    </div>
+
+    <div class="viewport-showcase" id="viewport-showcase">
+        
+        <!-- DARK MODE (ATMOSPHERIC OBSIDIAN / SLATE) -->
+        <div class="phone-frame dark-frame" id="dark-theme-frame">
+            <div class="frame-header-label">
+                <span>Dark Theme · 0300 UTC (Main Hour)</span>
+                <span style="color: var(--apple-blue);">Apple HIG Inset</span>
+            </div>
+
+            <!-- Top Nav -->
+            <div class="top-nav">
+                <div class="nav-icon-group">
+                    <button class="icon-btn" aria-label="Menu">
+                        <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+                    </button>
+                    <button class="icon-btn" aria-label="Delete">
+                        <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                    </button>
+                </div>
+                <div class="time-capsule">
+                    <span class="capsule-hour">0300 UTC</span>
+                    <span class="capsule-badge">AUTO</span>
+                </div>
+                <div class="nav-icon-group">
+                    <button class="icon-btn" aria-label="Older">
+                        <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+                    </button>
+                    <span class="pos-label">NEW</span>
+                    <button class="icon-btn" aria-label="Newer" style="opacity: 0.3;">
+                        <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="save-status-text">Saved 03:00 UTC · Live Auto-save active</div>
+
+            <!-- SECTION 1 -->
+            <div class="section-card">
+                <div class="section-title">Surface Observation</div>
+                <div class="fields-row col-3">
+                    <div class="input-cell"><span class="input-label">Dry bulb</span><span class="input-value">10.8</span></div>
+                    <div class="input-cell"><span class="input-label">Wet bulb</span><span class="input-value">4.4</span></div>
+                    <div class="input-cell"><span class="input-label">Dew pt</span><span class="input-value">-4.2</span></div>
+                </div>
+                <div class="fields-row col-3">
+                    <div class="input-cell"><span class="input-label">RH %</span><span class="input-value">33</span></div>
+                    <div class="input-cell"><span class="input-label">Vapour</span><span class="input-value">4.30</span></div>
+                    <div class="input-cell"><span class="input-label">Visibility</span><span class="input-value">95</span></div>
+                </div>
+                <div class="fields-row col-3">
+                    <div class="input-cell"><span class="input-label">Wind kt</span><span class="input-value">12</span></div>
+                    <div class="input-cell"><span class="input-label">Wind dir</span><span class="input-value">E (09)</span></div>
+                    <div class="input-cell"><span class="input-label">Cloud amt</span><span class="input-value">4</span></div>
+                </div>
+                <div class="fields-row col-3">
+                    <div class="input-cell"><span class="input-label">Low cloud</span><span class="input-value">Sc</span></div>
+                    <div class="input-cell"><span class="input-label">Med cloud</span><span class="input-value">Ac</span></div>
+                    <div class="input-cell"><span class="input-label">High cloud</span><span class="input-value">Ci</span></div>
+                </div>
+                <div class="fields-row col-3">
+                    <div class="input-cell"><span class="input-label">Low okta</span><span class="input-value">2</span></div>
+                    <div class="input-cell"><span class="input-label">Med okta</span><span class="input-value">1</span></div>
+                    <div class="input-cell"><span class="input-label">High okta</span><span class="input-value">1</span></div>
+                </div>
+            </div>
+
+            <!-- SECTION 2 -->
+            <div class="section-card">
+                <div class="section-title">Pressure (hPa)</div>
+                <div class="fields-row col-4">
+                    <div class="input-cell"><span class="input-label">SLP</span><span class="input-value">820.0</span></div>
+                    <div class="input-cell"><span class="input-label">Past SLP</span><span class="input-value">818.8</span></div>
+                    <div class="input-cell"><span class="input-label">Diff</span><span class="input-value diff-cell">+1.2</span></div>
+                    <div class="input-cell"><span class="input-label">MSLP</span><span class="input-value">1284.0</span></div>
+                </div>
+            </div>
+
+            <!-- SECTION 3 (Main Synoptic 0300) -->
+            <div class="section-card">
+                <div class="section-title">Max / Min Temps (°C)</div>
+                <div class="fields-row col-4">
+                    <div class="input-cell"><span class="input-label">Max</span><span class="input-value">18.4</span></div>
+                    <div class="input-cell"><span class="input-label">Max set</span><span class="input-value">11.0</span></div>
+                    <div class="input-cell"><span class="input-label">Min</span><span class="input-value">3.2</span></div>
+                    <div class="input-cell"><span class="input-label">Min set</span><span class="input-value">4.0</span></div>
+                </div>
+            </div>
+
+            <!-- SECTION 4 -->
+            <div class="section-card">
+                <div class="section-title">Rain & Ground</div>
+                <div class="fields-row col-2">
+                    <div class="input-cell"><span class="input-label">Rain (mm)</span><span class="input-value">0.0</span></div>
+                    <div class="input-cell"><span class="input-label">Ground</span><span class="input-value">Dry</span></div>
+                </div>
+            </div>
+
+            <!-- SECTION 5 (Main Synoptic 0300) -->
+            <div class="section-card">
+                <div class="section-title">Evaporation & Water</div>
+                <div class="fields-row col-2">
+                    <div class="input-cell"><span class="input-label">Evaporation (mm)</span><span class="input-value">2.4</span></div>
+                    <div class="input-cell"><span class="input-label">Water temp</span><span class="input-value">9.8</span></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- LIGHT MODE (CLEAN SNOW / PROPORTIONAL) -->
+        <div class="phone-frame light-frame" id="light-theme-frame">
+            <div class="frame-header-label">
+                <span>Light Theme · Field Validation Demo</span>
+                <span style="color: var(--apple-blue-light);">High Contrast</span>
+            </div>
+
+            <!-- Top Nav -->
+            <div class="top-nav">
+                <div class="nav-icon-group">
+                    <button class="icon-btn" aria-label="Menu">
+                        <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+                    </button>
+                    <button class="icon-btn" aria-label="Delete">
+                        <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                    </button>
+                </div>
+                <div class="time-capsule">
+                    <span class="capsule-hour">1200 UTC</span>
+                    <span class="capsule-badge">AUTO</span>
+                </div>
+                <div class="nav-icon-group">
+                    <button class="icon-btn" aria-label="Older">
+                        <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+                    </button>
+                    <span class="pos-label">1/14 · 1200</span>
+                    <button class="icon-btn" aria-label="Newer">
+                        <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="save-status-text">Saved 12:00 UTC · Clean layout verified</div>
+
+            <!-- SECTION 1 (Validation Highlight example: Wet Bulb > Dry Bulb) -->
+            <div class="section-card">
+                <div class="section-title">Surface Observation</div>
+                <div class="fields-row col-3">
+                    <div class="input-cell error"><span class="input-label">Dry bulb (Error)</span><span class="input-value">12.0</span></div>
+                    <div class="input-cell error"><span class="input-label">Wet bulb (> DB)</span><span class="input-value">13.5</span></div>
+                    <div class="input-cell"><span class="input-label">Dew pt</span><span class="input-value empty">—</span></div>
+                </div>
+                <div class="fields-row col-3">
+                    <div class="input-cell"><span class="input-label">RH %</span><span class="input-value empty">—</span></div>
+                    <div class="input-cell"><span class="input-label">Vapour</span><span class="input-value empty">—</span></div>
+                    <div class="input-cell"><span class="input-label">Visibility</span><span class="input-value">98</span></div>
+                </div>
+                <div class="fields-row col-3">
+                    <div class="input-cell"><span class="input-label">Wind kt</span><span class="input-value">8</span></div>
+                    <div class="input-cell"><span class="input-label">Wind dir</span><span class="input-value">SW (23)</span></div>
+                    <div class="input-cell"><span class="input-label">Cloud amt</span><span class="input-value">2</span></div>
+                </div>
+                <div class="fields-row col-3">
+                    <div class="input-cell"><span class="input-label">Low cloud</span><span class="input-value">Cu</span></div>
+                    <div class="input-cell"><span class="input-label">Med cloud</span><span class="input-value">/</span></div>
+                    <div class="input-cell"><span class="input-label">High cloud</span><span class="input-value">Ci</span></div>
+                </div>
+                <div class="fields-row col-3">
+                    <div class="input-cell"><span class="input-label">Low okta</span><span class="input-value">2</span></div>
+                    <div class="input-cell"><span class="input-label">Med okta</span><span class="input-value">/</span></div>
+                    <div class="input-cell"><span class="input-label">High okta</span><span class="input-value">0</span></div>
+                </div>
+            </div>
+
+            <!-- SECTION 2 -->
+            <div class="section-card">
+                <div class="section-title">Pressure (hPa)</div>
+                <div class="fields-row col-4">
+                    <div class="input-cell"><span class="input-label">SLP</span><span class="input-value">821.4</span></div>
+                    <div class="input-cell"><span class="input-label">Past SLP</span><span class="input-value">822.0</span></div>
+                    <div class="input-cell"><span class="input-label">Diff</span><span class="input-value" style="color: #FF9500; font-weight:700;">-0.6</span></div>
+                    <div class="input-cell"><span class="input-label">MSLP</span><span class="input-value">1285.2</span></div>
+                </div>
+            </div>
+
+            <!-- SECTION 3 (Main Synoptic 1200) -->
+            <div class="section-card">
+                <div class="section-title">Max / Min Temps (°C)</div>
+                <div class="fields-row col-4">
+                    <div class="input-cell"><span class="input-label">Max</span><span class="input-value">21.0</span></div>
+                    <div class="input-cell"><span class="input-label">Max set</span><span class="input-value">12.5</span></div>
+                    <div class="input-cell"><span class="input-label">Min</span><span class="input-value">5.0</span></div>
+                    <div class="input-cell"><span class="input-label">Min set</span><span class="input-value">6.0</span></div>
+                </div>
+            </div>
+
+            <!-- SECTION 4 -->
+            <div class="section-card">
+                <div class="section-title">Rain & Ground</div>
+                <div class="fields-row col-2">
+                    <div class="input-cell"><span class="input-label">Rain (mm)</span><span class="input-value">1.4</span></div>
+                    <div class="input-cell"><span class="input-label">Ground</span><span class="input-value">Wet</span></div>
+                </div>
+            </div>
+
+            <!-- SECTION 5 (Main Synoptic 1200) -->
+            <div class="section-card">
+                <div class="section-title">Evaporation & Water</div>
+                <div class="fields-row col-2">
+                    <div class="input-cell"><span class="input-label">Evaporation (mm)</span><span class="input-value">3.1</span></div>
+                    <div class="input-cell"><span class="input-label">Water temp</span><span class="input-value">11.2</span></div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+</body>
+</html>

@@ -4,7 +4,17 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -48,6 +59,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -57,6 +69,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,6 +78,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
@@ -79,6 +94,59 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 import kotlinx.coroutines.launch
+
+// ---------------------------------------------------------------------------
+// Apple Design System Palette - Atmospheric Meteorological Tokens
+// ---------------------------------------------------------------------------
+val AppleMidnightBackground = Color(0xFF0B0F19)
+val AppleMidnightSurface = Color(0xFF131B2A)
+val AppleMidnightSurfaceVariant = Color(0xFF1C273D)
+val AppleMidnightBorder = Color(0xFF263550)
+val AppleMidnightTextPrimary = Color(0xFFF0F4F8)
+val AppleMidnightTextSecondary = Color(0xFF8E9BAE)
+
+val AppleSnowBackground = Color(0xFFF2F4F8)
+val AppleSnowSurface = Color(0xFFFFFFFF)
+val AppleSnowSurfaceVariant = Color(0xFFE8EDF4)
+val AppleSnowBorder = Color(0xFFD5DCE6)
+val AppleSnowTextPrimary = Color(0xFF141923)
+val AppleSnowTextSecondary = Color(0xFF657084)
+
+val AppleSystemBlue = Color(0xFF007AFF)
+val AppleElectricBlue = Color(0xFF2997FF)
+val AppleSystemCoral = Color(0xFFFF453A)
+
+private val AppleDarkColorScheme = darkColorScheme(
+    primary = AppleElectricBlue,
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF162D4A),
+    onPrimaryContainer = Color(0xFF8EC2FF),
+    background = AppleMidnightBackground,
+    onBackground = AppleMidnightTextPrimary,
+    surface = AppleMidnightSurface,
+    onSurface = AppleMidnightTextPrimary,
+    surfaceVariant = AppleMidnightSurfaceVariant,
+    onSurfaceVariant = AppleMidnightTextSecondary,
+    outline = AppleMidnightBorder,
+    error = AppleSystemCoral,
+    onError = Color.White
+)
+
+private val AppleLightColorScheme = lightColorScheme(
+    primary = AppleSystemBlue,
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFE1EFFF),
+    onPrimaryContainer = Color(0xFF004EA3),
+    background = AppleSnowBackground,
+    onBackground = AppleSnowTextPrimary,
+    surface = AppleSnowSurface,
+    onSurface = AppleSnowTextPrimary,
+    surfaceVariant = AppleSnowSurfaceVariant,
+    onSurfaceVariant = AppleSnowTextSecondary,
+    outline = AppleSnowBorder,
+    error = AppleSystemCoral,
+    onError = Color.White
+)
 
 // ---------------------------------------------------------------------------
 // Focus chain: every input cell is linked top-to-bottom. The requested serial
@@ -120,9 +188,9 @@ class MainActivity : ComponentActivity() {
                 vm.openForm()
             }
 
-            // Light / Dark theme from the drawer toggle
+            // Apple Design Theme from the drawer toggle
             MaterialTheme(
-                colorScheme = if (vm.isDarkTheme.value) darkColorScheme() else lightColorScheme()
+                colorScheme = if (vm.isDarkTheme.value) AppleDarkColorScheme else AppleLightColorScheme
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -131,17 +199,25 @@ class MainActivity : ComponentActivity() {
                     ModalNavigationDrawer(
                         drawerState = drawerState,
                         drawerContent = {
-                            ModalDrawerSheet {
-                                // Drawer header
-                                Column(Modifier.padding(16.dp)) {
+                            ModalDrawerSheet(
+                                drawerContainerColor = MaterialTheme.colorScheme.surface,
+                                drawerContentColor = MaterialTheme.colorScheme.onSurface
+                            ) {
+                                // Apple Inset Drawer header
+                                Column(Modifier.padding(horizontal = 20.dp, vertical = 24.dp)) {
                                     Text(
                                         "Synoptic Pad",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            fontWeight = FontWeight.ExtraBold,
+                                            letterSpacing = (-0.5).sp
+                                        )
                                     )
+                                    Spacer(Modifier.height(2.dp))
                                     Text(
-                                        "Weather observation logbook",
-                                        style = MaterialTheme.typography.labelSmall,
+                                        "Surface Meteorological Logbook",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            letterSpacing = 0.2.sp
+                                        ),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -242,6 +318,7 @@ class MainActivity : ComponentActivity() {
                             onDismissRequest = {
                                 if (!isDownloading) vm.showUpdateDialog.value = false
                             },
+                            shape = RoundedCornerShape(20.dp),
                             title = {
                                 Text(
                                     text = "Update Available!",
@@ -410,8 +487,10 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+            .verticalScroll(rememberScrollState())
+            .imePadding()
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -509,9 +588,17 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
                     value = pressureChange,
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Diff") },
+                    label = { Text("Diff", maxLines = 1) },
                     singleLine = true,
                     textStyle = CellTextStyle,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
                     modifier = Modifier.weight(1f).fillMaxWidth()
                 )
                 DecimalField("MSLP", mslp, Modifier.weight(1f), link(FKey.MSLP))
@@ -519,7 +606,13 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
         }
 
         // ---------------- SECTION 3 (0300 & 1200 UTC only) ----------------
-        if (isMainSynoptic) {
+        AnimatedVisibility(
+            visible = isMainSynoptic,
+            enter = fadeIn(spring(dampingRatio = 0.78f, stiffness = 350f)) +
+                    expandVertically(spring(dampingRatio = 0.78f, stiffness = 350f)),
+            exit = fadeOut(spring(dampingRatio = 0.78f, stiffness = 350f)) +
+                   shrinkVertically(spring(dampingRatio = 0.78f, stiffness = 350f))
+        ) {
             SectionCard(title = "MAX / MIN TEMPS (°C)") {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     DecimalField("Max", maxTemp, Modifier.weight(1f), link(FKey.MAX), isError = vm.maxTempError)
@@ -541,7 +634,13 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
         }
 
         // ---------------- SECTION 5 (0300 & 1200 UTC only) ----------------
-        if (isMainSynoptic) {
+        AnimatedVisibility(
+            visible = isMainSynoptic,
+            enter = fadeIn(spring(dampingRatio = 0.78f, stiffness = 350f)) +
+                    expandVertically(spring(dampingRatio = 0.78f, stiffness = 350f)),
+            exit = fadeOut(spring(dampingRatio = 0.78f, stiffness = 350f)) +
+                   shrinkVertically(spring(dampingRatio = 0.78f, stiffness = 350f))
+        ) {
             SectionCard(title = "EVAPORATION & WATER") {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     DecimalField("Evaporation (mm)", evaporation, Modifier.weight(1f), link(FKey.EVAP))
@@ -557,6 +656,7 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
         val v = vi?.let { records.getOrNull(it) }
         AlertDialog(
             onDismissRequest = { vm.showDeleteConfirm.value = false },
+            shape = RoundedCornerShape(20.dp),
             title = { Text("Delete this observation?") },
             text = {
                 Text(
@@ -729,29 +829,53 @@ private fun HistoryScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(records, key = { it.id }) { rec ->
-                    Card(
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { vm.openRecord(rec) }
+                            .clickable { vm.openRecord(rec) },
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
                     ) {
-                        Column(Modifier.padding(10.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    rec.dateUtc,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    "${rec.synopticHourUtc} UTC",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary
+                        Column(Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        rec.dateUtc,
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = (-0.2).sp
+                                        )
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(50),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                    ) {
+                                        Text(
+                                            "${rec.synopticHourUtc} UTC",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            ),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Icon(
+                                    Icons.Filled.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                 )
                             }
-                            Spacer(Modifier.height(2.dp))
+                            Spacer(Modifier.height(4.dp))
                             Text(
                                 buildString {
                                     append("MSLP ")
@@ -764,7 +888,9 @@ private fun HistoryScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
                                     append(rec.dryBulbC.ifBlank { "–" })
                                     append(" °C")
                                 },
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    letterSpacing = (-0.1).sp
+                                ),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -776,13 +902,14 @@ private fun HistoryScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
 }
 
 // ---------------------------------------------------------------------------
-// Building blocks
+// Building blocks: Apple HIG Proportional Tabular & Inset Grouped System
 // ---------------------------------------------------------------------------
-/** Shared input style for every cell: bold 15sp monospace for dense legibility. */
+/** Shared input typography: clean proportional system font with optical weights and tight tracking. */
 private val CellTextStyle = TextStyle(
-    fontSize = 15.sp,
-    fontWeight = FontWeight.Bold,
-    fontFamily = FontFamily.Monospace
+    fontSize = 14.sp,
+    fontWeight = FontWeight.SemiBold,
+    fontFamily = FontFamily.Default,
+    letterSpacing = (-0.2).sp
 )
 
 @Composable
@@ -790,14 +917,26 @@ private fun SectionCard(
     title: String,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
+        tonalElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
             Text(
                 title,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp
+                ),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
             )
-            Spacer(Modifier.height(4.dp))
             content()
         }
     }
@@ -815,9 +954,18 @@ private fun TextFieldCell(
     OutlinedTextField(
         value = state.value,
         onValueChange = { state.value = it },
-        label = { Text(label) },
+        label = { Text(label, maxLines = 1) },
         singleLine = true,
         textStyle = CellTextStyle,
+        shape = RoundedCornerShape(10.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+            focusedLabelColor = MaterialTheme.colorScheme.primary,
+            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ),
         keyboardOptions = KeyboardOptions(
             imeAction = if (focusLink?.second != null) ImeAction.Next else ImeAction.Done
         ),
@@ -846,10 +994,21 @@ private fun DecimalField(
         onValueChange = { raw ->
             if (raw.isEmpty() || Regex("^-?\\d*(\\.\\d?)?$").matches(raw)) state.value = raw
         },
-        label = { Text(label) },
+        label = { Text(label, maxLines = 1) },
         singleLine = true,
         textStyle = CellTextStyle,
         isError = isError,
+        shape = RoundedCornerShape(10.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+            errorBorderColor = MaterialTheme.colorScheme.error,
+            errorContainerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.08f),
+            focusedLabelColor = MaterialTheme.colorScheme.primary,
+            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ),
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Decimal,
             imeAction = if (focusLink?.second != null) ImeAction.Next else ImeAction.Done
@@ -877,13 +1036,23 @@ private fun IntegerField(
     OutlinedTextField(
         value = state.value,
         onValueChange = { raw ->
-            // Accept digits and "-" anywhere (e.g. 242025-26); everything else is dropped.
             state.value = raw.filter { it.isDigit() || it == '-' }
         },
-        label = { Text(label) },
+        label = { Text(label, maxLines = 1) },
         singleLine = true,
         textStyle = CellTextStyle,
         isError = isError,
+        shape = RoundedCornerShape(10.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+            errorBorderColor = MaterialTheme.colorScheme.error,
+            errorContainerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.08f),
+            focusedLabelColor = MaterialTheme.colorScheme.primary,
+            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ),
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Text,
             autoCorrect = false,
@@ -917,9 +1086,18 @@ private fun VisibilityField(
                 else -> if (digits.toInt() in 90..99) digits else state.value
             }
         },
-        label = { Text("Visibility") },
+        label = { Text("Visibility", maxLines = 1) },
         singleLine = true,
         textStyle = CellTextStyle,
+        shape = RoundedCornerShape(10.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+            focusedLabelColor = MaterialTheme.colorScheme.primary,
+            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ),
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Number,
             imeAction = if (focusLink?.second != null) ImeAction.Next else ImeAction.Done
@@ -949,9 +1127,18 @@ private fun PickerField(
             value = state.value,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label) },
+            label = { Text(label, maxLines = 1) },
             singleLine = true,
             textStyle = CellTextStyle,
+            shape = RoundedCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+                focusedLabelColor = MaterialTheme.colorScheme.primary,
+                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+            ),
             keyboardOptions = KeyboardOptions(
                 imeAction = if (focusLink?.second != null) ImeAction.Next else ImeAction.Done
             ),
@@ -981,6 +1168,7 @@ private fun SelectionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(20.dp),
         title = { Text(title) },
         text = {
             Column(
@@ -1010,27 +1198,62 @@ private fun SynopticHourCapsule(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.94f else 1.0f,
+        animationSpec = spring(dampingRatio = 0.75f, stiffness = 400f),
+        label = "capsule_press_scale"
+    )
+
     Surface(
         shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.primaryContainer,
-        modifier = modifier.clickable(onClick = onClick)
+        color = if (isAuto) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(
+            1.dp,
+            if (isAuto) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+            else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+        ),
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 hourText,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.3).sp
+                ),
+                color = if (isAuto) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
             )
             Spacer(Modifier.width(8.dp))
-            Text(
-                if (isAuto) "AUTO" else "MANUAL",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = if (isAuto) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            ) {
+                Text(
+                    if (isAuto) "AUTO" else "MANUAL",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.5.sp
+                    ),
+                    color = if (isAuto) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
         }
     }
 }
@@ -1049,6 +1272,7 @@ private fun HourPickerDialog(
     val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(20.dp),
         title = { Text("Observation time & date (UTC)") },
         text = {
             Column(
@@ -1056,13 +1280,16 @@ private fun HourPickerDialog(
                     .heightIn(max = 440.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                // Historical Date Selector Card
-                Card(
+                // Historical Date Selector Card with Inset Grouped style
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 12.dp)
+                        .padding(bottom = 12.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
                 ) {
-                    Column(Modifier.padding(10.dp)) {
+                    Column(Modifier.padding(12.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1158,6 +1385,7 @@ private fun ValidationLimitsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(20.dp),
         title = { Text("Validation limits") },
         text = {
             Column(
