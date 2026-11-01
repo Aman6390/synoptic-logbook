@@ -96,14 +96,20 @@ import java.util.TimeZone
 import kotlinx.coroutines.launch
 
 // ---------------------------------------------------------------------------
-// Apple Design System Palette - Atmospheric Meteorological Tokens
+// Google Glass HUD & Apple Design System Palette
 // ---------------------------------------------------------------------------
-val AppleMidnightBackground = Color(0xFF0B0F19)
-val AppleMidnightSurface = Color(0xFF131B2A)
-val AppleMidnightSurfaceVariant = Color(0xFF1C273D)
-val AppleMidnightBorder = Color(0xFF263550)
-val AppleMidnightTextPrimary = Color(0xFFF0F4F8)
-val AppleMidnightTextSecondary = Color(0xFF8E9BAE)
+val GlassPitchBlack = Color(0xFF000000)
+val GlassHudSurface = Color(0xFF0E141D)
+val GlassHudSurfaceVariant = Color(0xFF151F2C)
+val GlassHudBorder = Color(0xFF1D2E42)
+val GlassHudCyan = Color(0xFF00E5FF)
+val GlassHudCyanContainer = Color(0xFF003846)
+val GlassHudCyanOnContainer = Color(0xFF80F2FF)
+val GlassHudTextPrimary = Color(0xFFFFFFFF)
+val GlassHudTextSecondary = Color(0xFF8E9BAE)
+val GlassHudGreen = Color(0xFF00E676)
+val GlassHudAmber = Color(0xFFFFAB00)
+val GlassHudNeonRed = Color(0xFFFF3D71)
 
 val AppleSnowBackground = Color(0xFFF2F4F8)
 val AppleSnowSurface = Color(0xFFFFFFFF)
@@ -111,25 +117,22 @@ val AppleSnowSurfaceVariant = Color(0xFFE8EDF4)
 val AppleSnowBorder = Color(0xFFD5DCE6)
 val AppleSnowTextPrimary = Color(0xFF141923)
 val AppleSnowTextSecondary = Color(0xFF657084)
-
 val AppleSystemBlue = Color(0xFF007AFF)
-val AppleElectricBlue = Color(0xFF2997FF)
-val AppleSystemCoral = Color(0xFFFF453A)
 
-private val AppleDarkColorScheme = darkColorScheme(
-    primary = AppleElectricBlue,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFF162D4A),
-    onPrimaryContainer = Color(0xFF8EC2FF),
-    background = AppleMidnightBackground,
-    onBackground = AppleMidnightTextPrimary,
-    surface = AppleMidnightSurface,
-    onSurface = AppleMidnightTextPrimary,
-    surfaceVariant = AppleMidnightSurfaceVariant,
-    onSurfaceVariant = AppleMidnightTextSecondary,
-    outline = AppleMidnightBorder,
-    error = AppleSystemCoral,
-    onError = Color.White
+private val GlassDarkColorScheme = darkColorScheme(
+    primary = GlassHudCyan,
+    onPrimary = Color.Black,
+    primaryContainer = GlassHudCyanContainer,
+    onPrimaryContainer = GlassHudCyanOnContainer,
+    background = GlassPitchBlack,
+    onBackground = GlassHudTextPrimary,
+    surface = GlassHudSurface,
+    onSurface = GlassHudTextPrimary,
+    surfaceVariant = GlassHudSurfaceVariant,
+    onSurfaceVariant = GlassHudTextSecondary,
+    outline = Color(0xFF00E5FF).copy(alpha = 0.28f),
+    error = GlassHudNeonRed,
+    onError = Color.Black
 )
 
 private val AppleLightColorScheme = lightColorScheme(
@@ -144,7 +147,7 @@ private val AppleLightColorScheme = lightColorScheme(
     surfaceVariant = AppleSnowSurfaceVariant,
     onSurfaceVariant = AppleSnowTextSecondary,
     outline = AppleSnowBorder,
-    error = AppleSystemCoral,
+    error = GlassHudNeonRed,
     onError = Color.White
 )
 
@@ -188,9 +191,9 @@ class MainActivity : ComponentActivity() {
                 vm.openForm()
             }
 
-            // Apple Design Theme from the drawer toggle
+            // Google Glass HUD & Apple Design Theme from the drawer toggle
             MaterialTheme(
-                colorScheme = if (vm.isDarkTheme.value) AppleDarkColorScheme else AppleLightColorScheme
+                colorScheme = if (vm.isDarkTheme.value) GlassDarkColorScheme else AppleLightColorScheme
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -203,7 +206,7 @@ class MainActivity : ComponentActivity() {
                                 drawerContainerColor = MaterialTheme.colorScheme.surface,
                                 drawerContentColor = MaterialTheme.colorScheme.onSurface
                             ) {
-                                // Apple Inset Drawer header
+                                // Inset Drawer header
                                 Column(Modifier.padding(horizontal = 20.dp, vertical = 24.dp)) {
                                     Text(
                                         "Synoptic Pad",
@@ -231,7 +234,7 @@ class MainActivity : ComponentActivity() {
                                         vm.openHistory()
                                     }
                                 )
-                                // Light / Dark theme toggle
+                                // Light / Dark (Glass HUD) theme toggle
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -239,7 +242,7 @@ class MainActivity : ComponentActivity() {
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        "Dark theme",
+                                        "Google Glass HUD",
                                         modifier = Modifier.weight(1f),
                                         style = MaterialTheme.typography.bodyMedium
                                     )
@@ -584,19 +587,24 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 DecimalField("SLP", slp, Modifier.weight(1f), link(FKey.SLP), isError = vm.slpError)
                 DecimalField("Past SLP", pastSlp, Modifier.weight(1f), link(FKey.PAST_SLP), isError = vm.pastSlpError)
+                val diffColor = when {
+                    pressureChange.startsWith("+") -> GlassHudGreen
+                    pressureChange.startsWith("-") -> GlassHudAmber
+                    else -> MaterialTheme.colorScheme.onSurface
+                }
                 OutlinedTextField(
                     value = pressureChange,
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Diff", maxLines = 1) },
                     singleLine = true,
-                    textStyle = CellTextStyle,
+                    textStyle = CellTextStyle.copy(color = diffColor),
                     shape = RoundedCornerShape(10.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
                         unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
                         unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
                     ),
                     modifier = Modifier.weight(1f).fillMaxWidth()
@@ -832,13 +840,18 @@ private fun HistoryScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(records, key = { it.id }) { rec ->
+                    val isGlassDark = MaterialTheme.colorScheme.background == GlassPitchBlack
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { vm.openRecord(rec) },
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                        border = BorderStroke(
+                            1.dp,
+                            if (isGlassDark) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                        )
                     ) {
                         Column(Modifier.padding(12.dp)) {
                             Row(
@@ -917,11 +930,16 @@ private fun SectionCard(
     title: String,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val isGlassDark = MaterialTheme.colorScheme.background == GlassPitchBlack
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
+        border = BorderStroke(
+            1.dp,
+            if (isGlassDark) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+            else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+        ),
         tonalElevation = 1.dp
     ) {
         Column(
@@ -929,13 +947,13 @@ private fun SectionCard(
             verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             Text(
-                title,
+                (if (isGlassDark) "●  " else "") + title,
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.8.sp
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.1.sp
                 ),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+                color = MaterialTheme.colorScheme.primary
             )
             content()
         }
@@ -1205,14 +1223,18 @@ private fun SynopticHourCapsule(
         animationSpec = spring(dampingRatio = 0.75f, stiffness = 400f),
         label = "capsule_press_scale"
     )
+    val isGlassDark = MaterialTheme.colorScheme.background == GlassPitchBlack
 
     Surface(
         shape = RoundedCornerShape(50),
-        color = if (isAuto) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+        color = if (isAuto) {
+            if (isGlassDark) GlassHudCyan.copy(alpha = 0.12f) else MaterialTheme.colorScheme.primaryContainer
+        } else MaterialTheme.colorScheme.surfaceVariant,
         border = BorderStroke(
             1.dp,
-            if (isAuto) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-            else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+            if (isAuto) {
+                if (isGlassDark) GlassHudCyan.copy(alpha = 0.45f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+            } else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
         ),
         modifier = modifier
             .graphicsLayer {
@@ -1236,22 +1258,28 @@ private fun SynopticHourCapsule(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = (-0.3).sp
                 ),
-                color = if (isAuto) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                color = if (isAuto) {
+                    if (isGlassDark) GlassHudCyan else MaterialTheme.colorScheme.onPrimaryContainer
+                } else MaterialTheme.colorScheme.onSurface
             )
             Spacer(Modifier.width(8.dp))
             Surface(
                 shape = RoundedCornerShape(50),
-                color = if (isAuto) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                color = if (isAuto) {
+                    if (isGlassDark) GlassHudCyan else MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                } else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
             ) {
                 Text(
-                    if (isAuto) "AUTO" else "MANUAL",
+                    if (isAuto) (if (isGlassDark) "HUD AUTO" else "AUTO") else "MANUAL",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 10.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 0.5.sp
                     ),
-                    color = if (isAuto) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    color = if (isAuto) {
+                        if (isGlassDark) Color.Black else MaterialTheme.colorScheme.primary
+                    } else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                 )
             }
         }
