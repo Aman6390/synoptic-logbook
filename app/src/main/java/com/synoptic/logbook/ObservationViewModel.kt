@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.math.roundToInt
 
 // ---------------------------------------------------------------------------
@@ -151,17 +153,22 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
     val editingId = mutableStateOf<Long?>(null)     // id of the record being edited
     val editingDate = mutableStateOf<String?>(null) // original date of that record
 
+    // ---------- Active slot state (decoupled from clock drift) ----------
+    val activeSlotHour = mutableStateOf(synopticHourFor(nowMillis.value))
+    val activeSlotDate = mutableStateOf(observationDateUtc(nowMillis.value))
+
     // ---------- Derived state (recomputed on each read/composition) ----------
     /** AUTO snap: rounds the live UTC clock down to the closest 3-hourly synoptic hour. */
     val autoHour: String get() = synopticHourFor(nowMillis.value)
     val isAuto: Boolean get() = manualHour.value == null
-    val selectedHour: String get() = manualHour.value ?: autoHour
+    val selectedHour: String get() = if (isAuto && viewIndex.value == null) activeSlotHour.value else (manualHour.value ?: activeSlotHour.value)
     val isAutoDate: Boolean get() = manualDate.value == null
-    val selectedDate: String get() = manualDate.value ?: editingDate.value ?: observationDateUtc(nowMillis.value)
+    val selectedDate: String get() = manualDate.value ?: editingDate.value ?: activeSlotDate.value
 
     var lastSavedSignature: String? = null
+    private val saveMutex = Mutex()
 
-    fun currentSignature(): String {
+    fun hasAnyData(): Boolean {
         val fields = listOf(
             dryBulb, wetBulb, dewPoint, rh, vapourPressure,
             windSpeed, windDirection, totalCloud, visibility,
@@ -170,7 +177,19 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
             slp, pastSlp, mslp, maxTemp, maxTempAfterSet,
             minTemp, minTempAfterSet, rain, ground, evaporation, waterTemp
         )
-        return fields.joinToString("\u0000") { it.value } + "\u0000" + selectedHour + "\u0000" + selectedDate
+        return fields.any { it.value.isNotBlank() }
+    }
+
+    fun currentSignature(date: String = selectedDate, hour: String = selectedHour): String {
+        val fields = listOf(
+            dryBulb, wetBulb, dewPoint, rh, vapourPressure,
+            windSpeed, windDirection, totalCloud, visibility,
+            lowCloudType, mediumCloudType, highCloudType,
+            lowCloudAmount, mediumCloudAmount, highCloudAmount,
+            slp, pastSlp, mslp, maxTemp, maxTempAfterSet,
+            minTemp, minTempAfterSet, rain, ground, evaporation, waterTemp
+        )
+        return fields.joinToString("\u0000") { it.value } + "\u0000" + hour + "\u0000" + date
     }
 
     // Main synoptic hours: the only slots where max/min temps and
@@ -488,46 +507,139 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
                 }
         }
 
-        // Clock ticker: while the hour is AUTO, keep nowMillis fresh so the
-        // auto-snap hour follows the device clock (every 30 s).
+        // Initial slot load on startup: load existing observation if already recorded
+        viewModelScope.launch {
+            val initHour = synopticHourFor(nowMillis.value)
+            val initDate = observationDateUtc(nowMillis.value)
+            activeSlotHour.value = initHour
+            activeSlotDate.value = initDate
+            val existing = dao.findByDateAndHour(initDate, initHour)
+            if (existing != null) {
+                loadRecord(existing, preserveAuto = true)
+            }
+        }
+
+        // Clock ticker: while the hour is AUTO, keep nowMillis fresh and
+        // smoothly transition synoptic slots if the 90-minute window rolls over.
         viewModelScope.launch {
             while (true) {
+                delay(30_000)
                 if (manualHour.value == null) {
                     nowMillis.value = System.currentTimeMillis()
+                    if (viewIndex.value == null) {
+                        val newHour = autoHour
+                        val newDate = observationDateUtc(nowMillis.value)
+                        if (newHour != activeSlotHour.value || newDate != activeSlotDate.value) {
+                            switchToSlot(newDate, newHour)
+                        }
+                    }
                 }
-                delay(30_000)
             }
         }
 
         // ---------- Auto-save (debounced 500 ms) ----------
-        // Any change to any field (or the synoptic hour) schedules a save. Rapid
-        // keystrokes restart the 500 ms wait via collectLatest, so the DB is
-        // written once typing pauses — not on every keystroke.
+        // Any change to any field schedules a save for the active slot. Rapid
+        // keystrokes restart the 500 ms wait via collectLatest.
         viewModelScope.launch {
             snapshotFlow {
-                val sig = currentSignature()
-                val fields = listOf(
-                    dryBulb, wetBulb, dewPoint, rh, vapourPressure,
-                    windSpeed, windDirection, totalCloud, visibility,
-                    lowCloudType, mediumCloudType, highCloudType,
-                    lowCloudAmount, mediumCloudAmount, highCloudAmount,
-                    slp, pastSlp, mslp, maxTemp, maxTempAfterSet,
-                    minTemp, minTempAfterSet, rain, ground, evaporation, waterTemp
-                )
-                sig to fields.any { it.value.isNotBlank() }
+                val sig = currentSignature(selectedDate, selectedHour)
+                sig to hasAnyData()
             }
                 .drop(1) // ignore the values captured at startup
                 .collectLatest { (signature, hasData) ->
                     if (!hasData) return@collectLatest // never persist a blank sheet
                     if (signature == lastSavedSignature) return@collectLatest // skip if unchanged
                     delay(500)                        // debounce
-                    doSave()
+                    if (hasAnyData() && currentSignature(selectedDate, selectedHour) != lastSavedSignature) {
+                        persistCurrentSheet(selectedDate, selectedHour)
+                    }
                 }
         }
     }
 
+    /**
+     * Called on Android lifecycle ON_RESUME: immediately syncs the live clock
+     * and transitions synoptic windows if time crossed into a new slot while minimized.
+     */
+    fun onResume() {
+        nowMillis.value = System.currentTimeMillis()
+        if (isAuto && viewIndex.value == null) {
+            val newHour = autoHour
+            val newDate = observationDateUtc(nowMillis.value)
+            if (newHour != activeSlotHour.value || newDate != activeSlotDate.value) {
+                viewModelScope.launch {
+                    switchToSlot(newDate, newHour)
+                }
+            }
+        }
+    }
+
+    /**
+     * Called on Android lifecycle ON_PAUSE: flushes any pending debounced edits
+     * immediately to Room SQLite so zero keystrokes or data are ever lost.
+     */
+    fun flushSave() {
+        viewModelScope.launch {
+            val curDate = selectedDate
+            val curHour = selectedHour
+            if (hasAnyData() && currentSignature(curDate, curHour) != lastSavedSignature) {
+                persistCurrentSheet(curDate, curHour)
+            }
+        }
+    }
+
+    /**
+     * Transitions between synoptic observation slots.
+     * Guarantees zero data loss and zero data bleed:
+     * 1. Safely flushes and saves any unsaved data from the current sheet to its own slot.
+     * 2. Sets the new active slot (date and hour).
+     * 3. Queries Room SQLite for that slot: loads existing record if present,
+     *    or presents a clean, blank sheet if no record exists yet.
+     */
+    suspend fun switchToSlot(targetDate: String, targetHour: String) {
+        // 1. Flush any pending unsaved changes on the current sheet to its own slot
+        val oldDate = activeSlotDate.value
+        val oldHour = activeSlotHour.value
+        if (hasAnyData() && currentSignature(oldDate, oldHour) != lastSavedSignature) {
+            persistCurrentSheet(oldDate, oldHour)
+        }
+
+        // 2. Switch active slot
+        activeSlotDate.value = targetDate
+        activeSlotHour.value = targetHour
+
+        // 3. Look up existing record for target slot
+        val existing = dao.findByDateAndHour(targetDate, targetHour)
+        if (existing != null) {
+            viewIndex.value = records.value.indexOfFirst { it.id == existing.id }.takeIf { it >= 0 }
+            loadRecord(existing, preserveAuto = isAuto)
+        } else {
+            viewIndex.value = null
+            clearFieldsOnly()
+            editingId.value = null
+            editingDate.value = targetDate
+            lastSavedSignature = null
+            saveStatus.value = null
+        }
+    }
+
+    /** Clears all input field values without altering session slot metadata. */
+    fun clearFieldsOnly() {
+        isLoadingRecord = true
+        listOf(
+            dryBulb, wetBulb, dewPoint, rh, vapourPressure,
+            windSpeed, windDirection, totalCloud, visibility,
+            lowCloudType, mediumCloudType, highCloudType,
+            lowCloudAmount, mediumCloudAmount, highCloudAmount,
+            slp, pastSlp, mslp,
+            maxTemp, maxTempAfterSet, minTemp, minTempAfterSet,
+            rain, ground, evaporation, waterTemp
+        ).forEach { it.value = "" }
+        isLoadingRecord = false
+    }
+
     // ---------- Record navigation ----------
-    fun loadRecord(e: WeatherObservationEntity) {
+    fun loadRecord(e: WeatherObservationEntity, preserveAuto: Boolean = false) {
         isLoadingRecord = true
         dryBulb.value = e.dryBulbC
         wetBulb.value = e.wetBulbC
@@ -555,114 +667,114 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
         ground.value = e.groundCondition
         evaporation.value = e.evaporationMm
         waterTemp.value = e.waterTempC
-        manualHour.value = e.synopticHourUtc
-        manualDate.value = e.dateUtc
+
+        if (!preserveAuto) {
+            manualHour.value = e.synopticHourUtc
+            manualDate.value = e.dateUtc
+        }
+        activeSlotHour.value = e.synopticHourUtc
+        activeSlotDate.value = e.dateUtc
         editingId.value = e.id
         editingDate.value = e.dateUtc
         isLoadingRecord = false
-        lastSavedSignature = currentSignature()
+        lastSavedSignature = currentSignature(e.dateUtc, e.synopticHourUtc)
     }
 
     fun clearSheet() {
-        isLoadingRecord = true
-        listOf(
-            dryBulb, wetBulb, dewPoint, rh, vapourPressure,
-            windSpeed, windDirection, totalCloud, visibility,
-            lowCloudType, mediumCloudType, highCloudType,
-            lowCloudAmount, mediumCloudAmount, highCloudAmount,
-            slp, pastSlp, mslp,
-            maxTemp, maxTempAfterSet, minTemp, minTempAfterSet,
-            rain, ground, evaporation, waterTemp
-        ).forEach { it.value = "" }
+        clearFieldsOnly()
         manualHour.value = null
         manualDate.value = null
         editingId.value = null
         editingDate.value = null
         lastSavedSignature = null
         saveStatus.value = null
-        isLoadingRecord = false
         nowMillis.value = System.currentTimeMillis()
+        activeSlotHour.value = synopticHourFor(nowMillis.value)
+        activeSlotDate.value = observationDateUtc(nowMillis.value)
     }
 
     fun selectHour(hour: String?) {
-        manualHour.value = hour
-        if (hour == null) nowMillis.value = System.currentTimeMillis()
         viewModelScope.launch {
-            val targetDate = selectedDate
-            val existing = dao.findByDateAndHour(targetDate, selectedHour)
-            if (existing != null) {
-                viewIndex.value = records.value.indexOfFirst { it.id == existing.id }.takeIf { it >= 0 }
-                loadRecord(existing)
-            } else if (editingId.value != null) {
-                editingId.value = null
-                editingDate.value = targetDate
-                lastSavedSignature = null
+            val targetHour = hour ?: synopticHourFor(System.currentTimeMillis())
+            val targetDate = if (hour == null) observationDateUtc(System.currentTimeMillis()) else selectedDate
+            manualHour.value = hour
+            if (hour == null) {
+                manualDate.value = null
+                nowMillis.value = System.currentTimeMillis()
             }
+            switchToSlot(targetDate, targetHour)
         }
     }
 
     fun setManualDate(dateUtc: String?) {
-        manualDate.value = dateUtc
         viewModelScope.launch {
-            val targetDate = selectedDate
-            val existing = dao.findByDateAndHour(targetDate, selectedHour)
-            if (existing != null) {
-                viewIndex.value = records.value.indexOfFirst { it.id == existing.id }.takeIf { it >= 0 }
-                loadRecord(existing)
-            } else if (editingId.value != null) {
-                editingId.value = null
-                editingDate.value = targetDate
-                lastSavedSignature = null
-            }
+            val targetDate = dateUtc ?: observationDateUtc(System.currentTimeMillis())
+            manualDate.value = dateUtc
+            switchToSlot(targetDate, selectedHour)
         }
     }
 
     fun goOlder() {
         val next = (viewIndex.value ?: -1) + 1
         val rec = records.value.getOrNull(next) ?: return
-        viewIndex.value = next
-        loadRecord(rec)
+        viewModelScope.launch {
+            val curDate = selectedDate
+            val curHour = selectedHour
+            if (hasAnyData() && currentSignature(curDate, curHour) != lastSavedSignature) {
+                persistCurrentSheet(curDate, curHour)
+            }
+            viewIndex.value = next
+            loadRecord(rec, preserveAuto = false)
+        }
     }
 
     fun goNewer() {
         val cur = viewIndex.value ?: return
-        if (cur == 0) {
-            viewIndex.value = null
-            clearSheet()
-        } else {
-            val rec = records.value.getOrNull(cur - 1) ?: return
-            viewIndex.value = cur - 1
-            loadRecord(rec)
+        viewModelScope.launch {
+            val curDate = selectedDate
+            val curHour = selectedHour
+            if (hasAnyData() && currentSignature(curDate, curHour) != lastSavedSignature) {
+                persistCurrentSheet(curDate, curHour)
+            }
+            if (cur == 0) {
+                viewIndex.value = null
+                manualHour.value = null
+                manualDate.value = null
+                val liveHour = synopticHourFor(System.currentTimeMillis())
+                val liveDate = observationDateUtc(System.currentTimeMillis())
+                switchToSlot(liveDate, liveHour)
+            } else {
+                val rec = records.value.getOrNull(cur - 1) ?: return@launch
+                viewIndex.value = cur - 1
+                loadRecord(rec, preserveAuto = false)
+            }
         }
     }
 
-    // ---------- Persistence ----------
-    fun doSave() {
-        viewModelScope.launch {
+    // ---------- Persistence (Thread-safe via saveMutex) ----------
+    suspend fun persistCurrentSheet(targetDate: String, targetHour: String) {
+        saveMutex.withLock {
+            if (!hasAnyData()) return
             saving.value = true
             saveStatus.value = "Saving…"
             try {
-                val sheetDate = selectedDate
-                val existing = dao.findByDateAndHour(sheetDate, selectedHour)
-                val targetId = when {
-                    existing != null -> existing.id
-                    editingDate.value == sheetDate && manualHour.value == selectedHour -> editingId.value ?: 0L
-                    else -> 0L
-                }
+                val existing = dao.findByDateAndHour(targetDate, targetHour)
+                val targetId = existing?.id ?: editingId.value.takeIf { editingDate.value == targetDate } ?: 0L
 
                 // Hidden-temps guard: sections 3 & 5 only apply at 0300/1200 UTC.
-                val maxTempV = if (isMainSynoptic) maxTemp.value else ""
-                val maxTempAfterSetV = if (isMainSynoptic) maxTempAfterSet.value else ""
-                val minTempV = if (isMainSynoptic) minTemp.value else ""
-                val minTempAfterSetV = if (isMainSynoptic) minTempAfterSet.value else ""
-                val evaporationV = if (isMainSynoptic) evaporation.value else ""
-                val waterTempV = if (isMainSynoptic) waterTemp.value else ""
+                val isMain = targetHour == "0300" || targetHour == "1200"
+                val maxTempV = if (isMain) maxTemp.value else ""
+                val maxTempAfterSetV = if (isMain) maxTempAfterSet.value else ""
+                val minTempV = if (isMain) minTemp.value else ""
+                val minTempAfterSetV = if (isMain) minTempAfterSet.value else ""
+                val evaporationV = if (isMain) evaporation.value else ""
+                val waterTempV = if (isMain) waterTemp.value else ""
 
                 val savedId = dao.insert(
                     WeatherObservationEntity(
                         id = targetId,
-                        dateUtc = sheetDate,
-                        synopticHourUtc = selectedHour,
+                        dateUtc = targetDate,
+                        synopticHourUtc = targetHour,
                         dryBulbC = dryBulb.value,
                         wetBulbC = wetBulb.value,
                         dewPointC = dewPoint.value,
@@ -693,8 +805,8 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 )
                 editingId.value = savedId
-                editingDate.value = sheetDate
-                lastSavedSignature = currentSignature()
+                editingDate.value = targetDate
+                lastSavedSignature = currentSignature(targetDate, targetHour)
 
                 val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
                 val t = String.format(
@@ -702,9 +814,17 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
                     cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE)
                 )
                 saveStatus.value = "Saved $t UTC"
+            } catch (e: Exception) {
+                saveStatus.value = "Save error"
             } finally {
                 saving.value = false
             }
+        }
+    }
+
+    fun doSave() {
+        viewModelScope.launch {
+            persistCurrentSheet(selectedDate, selectedHour)
         }
     }
 }

@@ -68,6 +68,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.MutableState
@@ -82,6 +83,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -89,6 +91,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.util.Calendar
 import java.util.Locale
@@ -182,6 +186,22 @@ class MainActivity : ComponentActivity() {
             val drawerState = rememberDrawerState(DrawerValue.Closed)
             val scope = rememberCoroutineScope()
             val context = LocalContext.current
+            val lifecycleOwner = LocalLifecycleOwner.current
+
+            // Lifecycle sync: on resume, check if synoptic window rolled over; on pause, flush unsaved edits
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, event ->
+                    when (event) {
+                        Lifecycle.Event.ON_RESUME -> vm.onResume()
+                        Lifecycle.Event.ON_PAUSE -> vm.flushSave()
+                        else -> {}
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
+                }
+            }
 
             // System back press / gesture navigation handlers
             BackHandler(enabled = drawerState.isOpen) {
@@ -1270,7 +1290,7 @@ private fun SynopticHourCapsule(
                 } else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
             ) {
                 Text(
-                    if (isAuto) (if (isGlassDark) "HUD AUTO" else "AUTO") else "MANUAL",
+                    if (isAuto) "AUTO" else "MANUAL",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 10.sp,
                         fontWeight = FontWeight.ExtraBold,
