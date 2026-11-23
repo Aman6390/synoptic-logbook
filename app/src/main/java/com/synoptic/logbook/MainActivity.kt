@@ -47,16 +47,17 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -135,6 +136,82 @@ val AppleSnowBorder = Color(0xFFD5DCE6)
 val AppleSnowTextPrimary = Color(0xFF141923)
 val AppleSnowTextSecondary = Color(0xFF657084)
 val AppleSystemBlue = Color(0xFF007AFF)
+
+val IconLockOpen: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "LockOpen",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(fill = SolidColor(Color.White)) {
+        moveTo(12f, 17f)
+        curveTo(10.9f, 17f, 10f, 16.1f, 10f, 15f)
+        reflectiveCurveTo(10.9f, 13f, 12f, 13f)
+        reflectiveCurveTo(14f, 13.9f, 14f, 15f)
+        reflectiveCurveTo(13.1f, 17f, 12f, 17f)
+        close()
+        moveTo(18f, 8f)
+        horizontalLineToRelative(-1f)
+        verticalLineTo(6f)
+        curveTo(17f, 3.24f, 14.76f, 1f, 12f, 1f)
+        curveTo(9.56f, 1f, 7.55f, 2.76f, 7.09f, 5.06f)
+        lineToRelative(1.96f, 0.44f)
+        curveTo(9.3f, 3.94f, 10.53f, 3f, 12f, 3f)
+        curveTo(13.66f, 3f, 15f, 4.34f, 15f, 6f)
+        verticalLineToRelative(2f)
+        horizontalLineTo(6f)
+        curveTo(4.9f, 8f, 4f, 8.9f, 4f, 10f)
+        verticalLineToRelative(10f)
+        curveTo(4f, 21.1f, 4.9f, 22f, 6f, 22f)
+        horizontalLineToRelative(12f)
+        curveTo(17.1f, 22f, 18f, 21.1f, 18f, 20f)
+        verticalLineTo(10f)
+        curveTo(18f, 8.9f, 17.1f, 8f, 16f, 8f)
+        close()
+    }.build()
+}
+
+val IconEditNote: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "EditNote",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(fill = SolidColor(Color.White)) {
+        moveTo(3f, 10f)
+        horizontalLineToRelative(11f)
+        verticalLineToRelative(2f)
+        horizontalLineTo(3f)
+        close()
+        moveTo(3f, 6f)
+        horizontalLineToRelative(11f)
+        verticalLineToRelative(2f)
+        horizontalLineTo(3f)
+        close()
+        moveTo(3f, 14f)
+        horizontalLineToRelative(7f)
+        verticalLineToRelative(2f)
+        horizontalLineTo(3f)
+        close()
+        moveTo(20.71f, 14.04f)
+        curveTo(21.1f, 13.65f, 21.1f, 13.02f, 20.71f, 12.63f)
+        lineToRelative(-1.34f, -1.34f)
+        curveTo(18.97f, 10.9f, 18.34f, 10.9f, 17.95f, 11.29f)
+        lineToRelative(-1.14f, 1.14f)
+        lineToRelative(2.76f, 2.76f)
+        lineToRelative(1.14f, -1.15f)
+        close()
+        moveTo(12f, 19.88f)
+        verticalLineTo(22f)
+        horizontalLineToRelative(2.12f)
+        lineToRelative(6.12f, -6.12f)
+        lineToRelative(-2.12f, -2.12f)
+        lineTo(12f, 19.88f)
+        close()
+    }.build()
+}
 
 private val GlassDarkColorScheme = darkColorScheme(
     primary = GlassHudCyan,
@@ -612,7 +689,7 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
                                     modifier = Modifier.size(32.dp)
                                 ) {
                                     Icon(
-                                        Icons.Filled.EditNote,
+                                        IconEditNote,
                                         contentDescription = "Open Mini Notepad",
                                         tint = if (vm.showSideNotepad.value) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurface
                                     )
@@ -633,7 +710,7 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
                                 modifier = Modifier.size(32.dp)
                             ) {
                                 Icon(
-                                    if (vm.isScreenLocked.value) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                                    if (vm.isScreenLocked.value) Icons.Filled.Lock else IconLockOpen,
                                     contentDescription = if (vm.isScreenLocked.value) "Unlock screen" else "Lock screen",
                                     tint = if (vm.isScreenLocked.value) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -697,7 +774,7 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                Icons.Filled.EditNote,
+                                IconEditNote,
                                 contentDescription = null,
                                 tint = Color(0xFF00E5FF),
                                 modifier = Modifier.size(16.dp)
@@ -1823,7 +1900,7 @@ private fun SideNotepadPanel(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            Icons.Filled.EditNote,
+                            IconEditNote,
                             contentDescription = null,
                             tint = GlassHudCyan,
                             modifier = Modifier.size(24.dp)

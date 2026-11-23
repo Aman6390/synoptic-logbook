@@ -31,6 +31,8 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Release APK
+        env:
+          GRADLE_OPTS: "-Xmx4096m -XX:MaxMetaspaceSize=1024m"
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Rename APK with Tag Version
