@@ -1,6 +1,8 @@
 package com.synoptic.logbook
 
+import android.app.Activity
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -11,7 +13,10 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -21,6 +26,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -37,11 +43,16 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -68,6 +79,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -178,6 +191,8 @@ private val FOCUS_CHAIN = listOf(
     FKey.EVAP, FKey.WATER
 )
 
+val LocalIsScreenLocked = compositionLocalOf { false }
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -187,6 +202,19 @@ class MainActivity : ComponentActivity() {
             val scope = rememberCoroutineScope()
             val context = LocalContext.current
             val lifecycleOwner = LocalLifecycleOwner.current
+            val activity = LocalContext.current as? Activity
+
+            // Keep screen on while one-tap screen lock is active
+            DisposableEffect(vm.isScreenLocked.value) {
+                if (vm.isScreenLocked.value) {
+                    activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+                onDispose {
+                    activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
 
             // Lifecycle sync: on resume, check if synoptic window rolled over; on pause, flush unsaved edits
             DisposableEffect(lifecycleOwner) {
@@ -204,6 +232,9 @@ class MainActivity : ComponentActivity() {
             }
 
             // System back press / gesture navigation handlers
+            BackHandler(enabled = vm.showSideNotepad.value) {
+                vm.showSideNotepad.value = false
+            }
             BackHandler(enabled = drawerState.isOpen) {
                 scope.launch { drawerState.close() }
             }
@@ -411,6 +442,17 @@ class MainActivity : ComponentActivity() {
                             onDismiss = { vm.showLimitsDialog.value = false }
                         )
                     }
+
+                    // Add Custom Input Box Dialog
+                    if (vm.showAddCustomFieldDialog.value) {
+                        AddCustomFieldDialog(
+                            onAdd = { label, type, unit ->
+                                vm.addCustomFieldTemplate(label, type, unit)
+                                vm.showAddCustomFieldDialog.value = false
+                            },
+                            onDismiss = { vm.showAddCustomFieldDialog.value = false }
+                        )
+                    }
                 }
             }
         }
@@ -507,59 +549,180 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
         if (key == lastKey) requesters[key] to null
         else requesters[key] to { advance(key) }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .imePadding()
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(7.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onMenuClick) {
-                        Icon(Icons.Filled.Menu, contentDescription = "Open menu")
+    CompositionLocalProvider(LocalIsScreenLocked provides vm.isScreenLocked.value) {
+        Box(Modifier.fillMaxSize()) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .imePadding()
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = onMenuClick) {
+                                Icon(Icons.Filled.Menu, contentDescription = "Open menu")
+                            }
+                            IconButton(
+                                onClick = { vm.showDeleteConfirm.value = true },
+                                enabled = editingId.value != null && !vm.isScreenLocked.value
+                            ) {
+                                Icon(Icons.Filled.Delete, contentDescription = "Delete this observation")
+                            }
+                        }
                     }
-                    IconButton(
-                        onClick = { vm.showDeleteConfirm.value = true },
-                        enabled = editingId.value != null // only when a saved record is attached
-                    ) {
-                        Icon(Icons.Filled.Delete, contentDescription = "Delete this observation")
-                    }
-                }
-            }
-            SynopticHourCapsule(
-                hourText = "$selectedHour UTC",
-                isAuto = isAuto,
-                onClick = { showHourPicker.value = true }
-            )
-            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { vm.goOlder() }, enabled = canGoOlder) {
-                        Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "Older entry")
-                    }
-                    Text(
-                        posLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold
+                    SynopticHourCapsule(
+                        hourText = "$selectedHour UTC",
+                        isAuto = isAuto,
+                        onClick = { if (!vm.isScreenLocked.value) showHourPicker.value = true }
                     )
-                    IconButton(onClick = { vm.goNewer() }, enabled = canGoNewer) {
-                        Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Newer entry")
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
+                            IconButton(
+                                onClick = { vm.goOlder() },
+                                enabled = canGoOlder && !vm.isScreenLocked.value,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "Older entry")
+                            }
+                            Text(
+                                posLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            IconButton(
+                                onClick = { vm.goNewer() },
+                                enabled = canGoNewer && !vm.isScreenLocked.value,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Newer entry")
+                            }
+                            // Mini Notepad Button with active Cyan dot indicator
+                            Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                                IconButton(
+                                    onClick = { vm.showSideNotepad.value = true },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.EditNote,
+                                        contentDescription = "Open Mini Notepad",
+                                        tint = if (vm.showSideNotepad.value) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                if (vm.hasAttachedNotes) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(top = 4.dp, end = 4.dp)
+                                            .size(6.dp)
+                                            .background(Color(0xFF00E5FF), shape = RoundedCornerShape(50))
+                                    )
+                                }
+                            }
+                            // One-Tap Screen Lock Button (Padlock)
+                            IconButton(
+                                onClick = { vm.toggleScreenLock() },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    if (vm.isScreenLocked.value) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                                    contentDescription = if (vm.isScreenLocked.value) "Unlock screen" else "Lock screen",
+                                    tint = if (vm.isScreenLocked.value) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
-            }
-        }
-        // Subtle auto-save indicator lives in the header to save vertical space
-        Text(
-            saveStatus.value ?: "Auto-saves as you type",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        )
+
+                // Locked Banner Indicator
+                if (vm.isScreenLocked.value) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFF00E5FF).copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.45f)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                Icons.Filled.Lock,
+                                contentDescription = null,
+                                tint = Color(0xFF00E5FF),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "SCREEN LOCKED • TOUCH FROZEN • TAP PADLOCK TO UNLOCK",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.6.sp
+                                ),
+                                color = Color(0xFF00E5FF)
+                            )
+                        }
+                    }
+                }
+
+                // Subtle auto-save indicator lives in the header to save vertical space
+                Text(
+                    saveStatus.value ?: "Auto-saves as you type",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+
+                // Note preview snippet chip if notes attached and not locked
+                if (vm.hasAttachedNotes && !vm.isScreenLocked.value) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { vm.showSideNotepad.value = true },
+                        color = Color(0xFF00E5FF).copy(alpha = 0.08f),
+                        border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.25f)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.EditNote,
+                                contentDescription = null,
+                                tint = Color(0xFF00E5FF),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            val previewSnippet = if (vm.remarks.value.isNotBlank()) {
+                                "Note: " + vm.remarks.value.replace("\n", " ").take(40) + (if (vm.remarks.value.length > 40) "…" else "")
+                            } else {
+                                "${vm.customFieldValues.count { it.value.isNotBlank() }} custom reading(s) attached"
+                            }
+                            Text(
+                                previewSnippet,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF00E5FF),
+                                maxLines = 1,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                "EDIT",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFF00E5FF)
+                            )
+                        }
+                    }
+                }
 
         // ---------------- SECTION 1 ----------------
         SectionCard(title = "SURFACE OBSERVATION") {
@@ -677,6 +840,26 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
             }
         }
     }
+
+    // Side Notepad slide-over panel
+    AnimatedVisibility(
+        visible = vm.showSideNotepad.value,
+        enter = fadeIn() + slideInHorizontally(
+            initialOffsetX = { it },
+            animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)
+        ),
+        exit = fadeOut() + slideOutHorizontally(
+            targetOffsetX = { it },
+            animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)
+        )
+    ) {
+        SideNotepadPanel(
+            vm = vm,
+            onClose = { vm.showSideNotepad.value = false }
+        )
+    }
+}
+}
 
     // ---------------- Delete confirmation ----------------
     if (vm.showDeleteConfirm.value) {
@@ -988,10 +1171,12 @@ private fun TextFieldCell(
     modifier: Modifier = Modifier,
     focusLink: Pair<FocusRequester?, (() -> Unit)?>? = null
 ) {
+    val isLocked = LocalIsScreenLocked.current
     val fm = LocalFocusManager.current
     OutlinedTextField(
         value = state.value,
         onValueChange = { state.value = it },
+        readOnly = isLocked,
         label = { Text(label, maxLines = 1) },
         singleLine = true,
         textStyle = CellTextStyle,
@@ -1026,12 +1211,14 @@ private fun DecimalField(
     focusLink: Pair<FocusRequester?, (() -> Unit)?>? = null,
     isError: Boolean = false
 ) {
+    val isLocked = LocalIsScreenLocked.current
     val fm = LocalFocusManager.current
     OutlinedTextField(
         value = state.value,
         onValueChange = { raw ->
             if (raw.isEmpty() || Regex("^-?\\d*(\\.\\d?)?$").matches(raw)) state.value = raw
         },
+        readOnly = isLocked,
         label = { Text(label, maxLines = 1) },
         singleLine = true,
         textStyle = CellTextStyle,
@@ -1070,12 +1257,14 @@ private fun IntegerField(
     focusLink: Pair<FocusRequester?, (() -> Unit)?>? = null,
     isError: Boolean = false
 ) {
+    val isLocked = LocalIsScreenLocked.current
     val fm = LocalFocusManager.current
     OutlinedTextField(
         value = state.value,
         onValueChange = { raw ->
             state.value = raw.filter { it.isDigit() || it == '-' }
         },
+        readOnly = isLocked,
         label = { Text(label, maxLines = 1) },
         singleLine = true,
         textStyle = CellTextStyle,
@@ -1113,6 +1302,7 @@ private fun VisibilityField(
     modifier: Modifier = Modifier,
     focusLink: Pair<FocusRequester?, (() -> Unit)?>? = null
 ) {
+    val isLocked = LocalIsScreenLocked.current
     val fm = LocalFocusManager.current
     OutlinedTextField(
         value = state.value,
@@ -1124,6 +1314,7 @@ private fun VisibilityField(
                 else -> if (digits.toInt() in 90..99) digits else state.value
             }
         },
+        readOnly = isLocked,
         label = { Text("Visibility", maxLines = 1) },
         singleLine = true,
         textStyle = CellTextStyle,
@@ -1159,6 +1350,7 @@ private fun PickerField(
     focusLink: Pair<FocusRequester?, (() -> Unit)?>? = null,
     onClick: () -> Unit
 ) {
+    val isLocked = LocalIsScreenLocked.current
     val fm = LocalFocusManager.current
     Box(modifier) {
         OutlinedTextField(
@@ -1191,7 +1383,12 @@ private fun PickerField(
         Box(
             Modifier
                 .matchParentSize()
-                .clickable(onClick = onClick)
+                .clickable {
+                    if (!isLocked) {
+                        fm.clearFocus()
+                        onClick()
+                    }
+                }
         )
     }
 }
@@ -1236,10 +1433,11 @@ private fun SynopticHourCapsule(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isLocked = LocalIsScreenLocked.current
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.94f else 1.0f,
+        targetValue = if (isPressed && !isLocked) 0.94f else 1.0f,
         animationSpec = spring(dampingRatio = 0.75f, stiffness = 400f),
         label = "capsule_press_scale"
     )
@@ -1264,6 +1462,7 @@ private fun SynopticHourCapsule(
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
+                enabled = !isLocked,
                 onClick = onClick
             )
     ) {
@@ -1573,6 +1772,586 @@ private fun ValidationLimitsDialog(
                 }
             ) {
                 Text("Save", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun SideNotepadPanel(
+    vm: ObservationViewModel,
+    onClose: () -> Unit
+) {
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // Semi-transparent scrim
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.65f))
+                .clickable { onClose() }
+        )
+
+        // Slide-out Drawer Panel on Right
+        Surface(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(0.92f)
+                .align(Alignment.CenterEnd),
+            color = if (vm.isDarkTheme.value) Color(0xFF0A0F17) else MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, GlassHudCyan.copy(alpha = 0.35f)),
+            shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
+            shadowElevation = 16.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.EditNote,
+                            contentDescription = null,
+                            tint = GlassHudCyan,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                "MINI NOTEPAD",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.5.sp
+                                )
+                            )
+                            Text(
+                                "${vm.selectedHour} UTC • ${vm.selectedDate}",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color = GlassHudCyan
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = onClose,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(Icons.Filled.Close, contentDescription = "Close notepad")
+                    }
+                }
+
+                Divider(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                )
+
+                // ---------------- SECTION A: DYNAMIC CUSTOM INPUT BOXES ----------------
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "CUSTOM INPUT BOXES",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Surface(
+                        modifier = Modifier.clickable { vm.showAddCustomFieldDialog.value = true },
+                        color = GlassHudCyan.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, GlassHudCyan),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = null,
+                                tint = GlassHudCyan,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "Add Box",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = GlassHudCyan
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Station template info pill
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = GlassHudCyan.copy(alpha = 0.05f),
+                    border = BorderStroke(1.dp, GlassHudCyan.copy(alpha = 0.25f)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        "Station template definitions persist across all synoptic hours. Values are saved per observation.",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                if (vm.customFieldTemplates.value.isEmpty()) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(
+                            "No custom input boxes added yet. Tap '+ Add Box' above to create custom parameters like Soil Temp, Anemometer Run, or Observer ID.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(14.dp)
+                        )
+                    }
+                } else {
+                    vm.customFieldTemplates.value.forEach { template ->
+                        CustomBoxItem(
+                            template = template,
+                            value = vm.customFieldValues[template.id] ?: "",
+                            onValueChange = { newVal ->
+                                val filtered = when (template.type) {
+                                    CustomFieldType.DECIMAL -> if (newVal.isEmpty() || Regex("^-?\\d*(\\.\\d*)?$").matches(newVal)) newVal else vm.customFieldValues[template.id] ?: ""
+                                    CustomFieldType.INTEGER -> newVal.filter { it.isDigit() || it == '-' }
+                                    CustomFieldType.TEXT -> newVal
+                                }
+                                vm.customFieldValues[template.id] = filtered
+                            },
+                            onDelete = { vm.removeCustomFieldTemplate(template.id) }
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+
+                Divider(
+                    modifier = Modifier.padding(vertical = 14.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                )
+
+                // ---------------- SECTION B: STATION REMARKS & PHENOMENA ----------------
+                Text(
+                    "STATION REMARKS & PHENOMENA",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+
+                // Quick Meteorological tags
+                val quickTags = listOf(
+                    "⚡ Lightning",
+                    "🌧️ Rain Started",
+                    "💨 Squall / Gusts",
+                    "🌫️ Fog Bank",
+                    "☀️ Solar Halo",
+                    "⚙️ Barometer Check"
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    quickTags.take(3).forEach { tag ->
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { vm.appendRemark(tag) },
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+                            shape = RoundedCornerShape(999.dp)
+                        ) {
+                            Text(
+                                tag,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    quickTags.drop(3).forEach { tag ->
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { vm.appendRemark(tag) },
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+                            shape = RoundedCornerShape(999.dp)
+                        ) {
+                            Text(
+                                tag,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Surface(
+                        modifier = Modifier.clickable { vm.appendUtcStamp() },
+                        color = GlassHudCyan.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, GlassHudCyan.copy(alpha = 0.4f)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = null,
+                                tint = GlassHudCyan,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "+ UTC Stamp",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = GlassHudCyan
+                            )
+                        }
+                    }
+
+                    if (vm.remarks.value.isNotBlank()) {
+                        Text(
+                            "Clear text",
+                            style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.clickable { vm.remarks.value = "" }
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = vm.remarks.value,
+                    onValueChange = { vm.remarks.value = it },
+                    minLines = 4,
+                    maxLines = 8,
+                    placeholder = {
+                        Text(
+                            "Record local station remarks, squalls, optical phenomena, or observer notes here...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GlassHudCyan,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(14.dp))
+
+                Text(
+                    "Auto-saves to ${vm.selectedHour} UTC observation sheet",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CustomBoxItem(
+    template: CustomFieldTemplate,
+    value: String,
+    onValueChange: (String) -> Unit,
+    onDelete: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
+        border = BorderStroke(1.dp, GlassHudCyan.copy(alpha = 0.25f)),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(Modifier.padding(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    template.label,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = GlassHudCyan
+                )
+                Spacer(Modifier.width(6.dp))
+
+                // Type badge
+                val (badgeBg, badgeText) = when (template.type) {
+                    CustomFieldType.DECIMAL -> GlassHudCyan.copy(alpha = 0.15f) to GlassHudCyan
+                    CustomFieldType.INTEGER -> Color(0xFF00E676).copy(alpha = 0.15f) to Color(0xFF00E676)
+                    CustomFieldType.TEXT -> Color(0xFFFFAB00).copy(alpha = 0.15f) to Color(0xFFFFAB00)
+                }
+                Surface(
+                    color = badgeBg,
+                    border = BorderStroke(1.dp, badgeText.copy(alpha = 0.4f)),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        template.type.name,
+                        style = TextStyle(fontSize = 8.sp, fontWeight = FontWeight.ExtraBold),
+                        color = badgeText,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                    )
+                }
+
+                if (template.unit.isNotBlank()) {
+                    Spacer(Modifier.width(6.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            template.unit,
+                            style = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+
+                Spacer(Modifier.weight(1f))
+
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Remove field",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(6.dp))
+
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = template.type != CustomFieldType.TEXT,
+                placeholder = {
+                    Text(
+                        if (template.unit.isNotBlank()) "Enter ${template.label} (${template.unit})" else "Enter ${template.label}...",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = when (template.type) {
+                        CustomFieldType.DECIMAL -> KeyboardType.Decimal
+                        CustomFieldType.INTEGER -> KeyboardType.Number
+                        CustomFieldType.TEXT -> KeyboardType.Text
+                    }
+                ),
+                shape = RoundedCornerShape(8.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = GlassHudCyan,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun AddCustomFieldDialog(
+    onAdd: (label: String, type: CustomFieldType, unit: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val labelState = remember { mutableStateOf("") }
+    val typeState = remember { mutableStateOf(CustomFieldType.DECIMAL) }
+    val unitState = remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(20.dp),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.Add,
+                    contentDescription = null,
+                    tint = GlassHudCyan,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Add Custom Input Box", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Field Name
+                Text(
+                    "FIELD LABEL",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = labelState.value,
+                    onValueChange = { labelState.value = it },
+                    placeholder = { Text("e.g. Soil Temp 5cm, Run of Wind") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Input Type selector
+                Text(
+                    "INPUT TYPE",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        CustomFieldType.DECIMAL to "Decimal (12.3)",
+                        CustomFieldType.INTEGER to "Integer (123)",
+                        CustomFieldType.TEXT to "Text (ABC)"
+                    ).forEach { (t, display) ->
+                        val isSel = typeState.value == t
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { typeState.value = t },
+                            color = if (isSel) GlassHudCyan.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isSel) GlassHudCyan else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    t.name,
+                                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp),
+                                    color = if (isSel) GlassHudCyan else MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    display.substringAfter("(").substringBefore(")"),
+                                    style = TextStyle(fontSize = 9.sp),
+                                    color = if (isSel) GlassHudCyan.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Unit (optional)
+                Text(
+                    "UNIT (OPTIONAL)",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = unitState.value,
+                    onValueChange = { unitState.value = it },
+                    placeholder = { Text("e.g. °C, km, mm, hPa, %") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Quick unit suggestions
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf("°C", "km", "mm", "hPa", "kt", "%").forEach { u ->
+                        Surface(
+                            modifier = Modifier.clickable { unitState.value = u },
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                u,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (labelState.value.isNotBlank()) {
+                        onAdd(labelState.value, typeState.value, unitState.value)
+                    }
+                },
+                enabled = labelState.value.isNotBlank()
+            ) {
+                Text("Add Box", fontWeight = FontWeight.Bold, color = GlassHudCyan)
             }
         },
         dismissButton = {

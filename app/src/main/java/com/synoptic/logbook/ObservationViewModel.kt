@@ -6,10 +6,13 @@ import android.content.Intent
 import androidx.core.content.FileProvider
 import java.io.File
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
@@ -87,9 +90,39 @@ fun formatDifference(a: String, b: String): String {
 /** Simple state-based router between the two screens. */
 enum class AppScreen { FORM, HISTORY }
 
+enum class CustomFieldType {
+    DECIMAL,
+    INTEGER,
+    TEXT
+}
+
+data class CustomFieldTemplate(
+    val id: String,
+    val label: String,
+    val type: CustomFieldType,
+    val unit: String = ""
+)
+
 class ObservationViewModel(app: Application) : AndroidViewModel(app) {
 
     private val dao = AppDatabase.getInstance(app).observationDao()
+
+    // ---------- One-Tap Screen Lock (Keep Screen On & Freeze Inputs) ----------
+    val isScreenLocked = mutableStateOf(false)
+
+    fun toggleScreenLock() {
+        isScreenLocked.value = !isScreenLocked.value
+    }
+
+    // ---------- Mini Notepad & Custom Input Boxes ----------
+    val showSideNotepad = mutableStateOf(false)
+    val showAddCustomFieldDialog = mutableStateOf(false)
+    val remarks = mutableStateOf("")
+    val customFieldTemplates = mutableStateOf<List<CustomFieldTemplate>>(emptyList())
+    val customFieldValues = mutableStateMapOf<String, String>()
+
+    val hasAttachedNotes: Boolean
+        get() = remarks.value.isNotBlank() || customFieldValues.values.any { it.isNotBlank() }
 
     // ---------- Top capsule: synoptic hour & date ----------
     val manualHour = mutableStateOf<String?>(null)
@@ -177,7 +210,7 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
             slp, pastSlp, mslp, maxTemp, maxTempAfterSet,
             minTemp, minTempAfterSet, rain, ground, evaporation, waterTemp
         )
-        return fields.any { it.value.isNotBlank() }
+        return fields.any { it.value.isNotBlank() } || remarks.value.isNotBlank() || customFieldValues.values.any { it.isNotBlank() }
     }
 
     fun currentSignature(date: String = selectedDate, hour: String = selectedHour): String {
@@ -189,7 +222,8 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
             slp, pastSlp, mslp, maxTemp, maxTempAfterSet,
             minTemp, minTempAfterSet, rain, ground, evaporation, waterTemp
         )
-        return fields.joinToString("\u0000") { it.value } + "\u0000" + hour + "\u0000" + date
+        val cfPairs = customFieldValues.entries.sortedBy { it.key }.joinToString(";") { "${it.key}=${it.value}" }
+        return fields.joinToString("\u0000") { it.value } + "\u0000" + hour + "\u0000" + date + "\u0000" + remarks.value + "\u0000" + cfPairs
     }
 
     // Main synoptic hours: the only slots where max/min temps and
@@ -222,6 +256,94 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- Navigation + theme (Milestone 7) ----------
     private val prefs = app.getSharedPreferences("synoptic_prefs", Context.MODE_PRIVATE)
+
+    fun loadCustomFieldTemplates(): List<CustomFieldTemplate> {
+        val jsonStr = prefs.getString("custom_field_templates", null) ?: return emptyList()
+        return try {
+            val array = JSONArray(jsonStr)
+            val list = mutableListOf<CustomFieldTemplate>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val id = obj.optString("id", "")
+                val label = obj.optString("label", "")
+                val typeStr = obj.optString("type", "TEXT")
+                val type = try { CustomFieldType.valueOf(typeStr) } catch (_: Exception) { CustomFieldType.TEXT }
+                val unit = obj.optString("unit", "")
+                if (id.isNotBlank() && label.isNotBlank()) {
+                    list.add(CustomFieldTemplate(id, label, type, unit))
+                }
+            }
+            list
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveCustomFieldTemplates(templates: List<CustomFieldTemplate>) {
+        customFieldTemplates.value = templates
+        val array = JSONArray()
+        templates.forEach { t ->
+            val obj = JSONObject()
+            obj.put("id", t.id)
+            obj.put("label", t.label)
+            obj.put("type", t.type.name)
+            obj.put("unit", t.unit)
+            array.put(obj)
+        }
+        prefs.edit().putString("custom_field_templates", array.toString()).apply()
+    }
+
+    fun addCustomFieldTemplate(label: String, type: CustomFieldType, unit: String) {
+        val trimmedLabel = label.trim()
+        if (trimmedLabel.isBlank()) return
+        val id = "cf_" + System.currentTimeMillis() + "_" + trimmedLabel.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9_]"), "_")
+        val newTemplate = CustomFieldTemplate(id = id, label = trimmedLabel, type = type, unit = unit.trim())
+        saveCustomFieldTemplates(customFieldTemplates.value + newTemplate)
+    }
+
+    fun removeCustomFieldTemplate(id: String) {
+        saveCustomFieldTemplates(customFieldTemplates.value.filter { it.id != id })
+        customFieldValues.remove(id)
+    }
+
+    fun serializeCustomFieldsJson(): String {
+        if (customFieldValues.isEmpty()) return ""
+        val obj = JSONObject()
+        customFieldValues.forEach { (k, v) ->
+            if (v.isNotBlank()) {
+                obj.put(k, v)
+            }
+        }
+        return if (obj.length() > 0) obj.toString() else ""
+    }
+
+    fun parseCustomFieldsJson(jsonStr: String) {
+        customFieldValues.clear()
+        if (jsonStr.isBlank()) return
+        try {
+            val obj = JSONObject(jsonStr)
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                customFieldValues[key] = obj.optString(key, "")
+            }
+        } catch (_: Exception) {
+            // ignore malformed
+        }
+    }
+
+    fun appendRemark(text: String) {
+        val cur = remarks.value.trimEnd()
+        remarks.value = if (cur.isBlank()) text else "$cur; $text"
+    }
+
+    fun appendUtcStamp() {
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+        val stamp = String.format(Locale.US, "[%02d:%02d UTC] ", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
+        val cur = remarks.value
+        remarks.value = if (cur.isBlank()) stamp else if (cur.endsWith("\n") || cur.endsWith(" ")) "$cur$stamp" else "$cur $stamp"
+    }
+
     val currentScreen = mutableStateOf(AppScreen.FORM)
     val isDarkTheme = mutableStateOf(prefs.getBoolean("dark_theme", false))
 
@@ -350,7 +472,7 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
             val list = records.value
             if (list.isEmpty()) return@launch
 
-            val header = "ID,Date_UTC,Hour_UTC,DryBulb_C,WetBulb_C,DewPoint_C,RH_Pct,VapourPressure,WindSpeed_kt,WindDir,TotalCloud,Visibility,LowCloudType,MedCloudType,HighCloudType,LowCloudOkta,MedCloudOkta,HighCloudOkta,SLP_hPa,PastSLP_hPa,PressureDiff,MSLP_hPa,MaxTemp_C,MaxTempSet_C,MinTemp_C,MinTempSet_C,Rain_mm,GroundCondition,Evaporation_mm,WaterTemp_C\n"
+            val header = "ID,Date_UTC,Hour_UTC,DryBulb_C,WetBulb_C,DewPoint_C,RH_Pct,VapourPressure,WindSpeed_kt,WindDir,TotalCloud,Visibility,LowCloudType,MedCloudType,HighCloudType,LowCloudOkta,MedCloudOkta,HighCloudOkta,SLP_hPa,PastSLP_hPa,PressureDiff,MSLP_hPa,MaxTemp_C,MaxTempSet_C,MinTemp_C,MinTempSet_C,Rain_mm,GroundCondition,Evaporation_mm,WaterTemp_C,Remarks,CustomFields\n"
             val rows = list.joinToString("\n") { e ->
                 listOf(
                     e.id, e.dateUtc, e.synopticHourUtc, e.dryBulbC, e.wetBulbC, e.dewPointC,
@@ -359,7 +481,9 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
                     e.highCloudType, e.lowCloudAmount, e.mediumCloudAmount, e.highCloudAmount,
                     e.slp, e.pastSlp, e.pressureChange, e.mslp, e.maxTempC, e.maxTempAfterSetC,
                     e.minTempC, e.minTempAfterSetC, e.rainMm, "\"${e.groundCondition}\"",
-                    e.evaporationMm, e.waterTempC
+                    e.evaporationMm, e.waterTempC,
+                    "\"${e.remarks.replace("\"", "\"\"")}\"",
+                    "\"${e.customFieldsJson.replace("\"", "\"\"")}\""
                 ).joinToString(",")
             }
 
@@ -457,6 +581,9 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     init {
+        // Load custom field templates for the station
+        customFieldTemplates.value = loadCustomFieldTemplates()
+
         // Aggressive update check on app launch
         checkForUpdates(isManual = false)
 
@@ -635,6 +762,8 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
             maxTemp, maxTempAfterSet, minTemp, minTempAfterSet,
             rain, ground, evaporation, waterTemp
         ).forEach { it.value = "" }
+        remarks.value = ""
+        customFieldValues.clear()
         isLoadingRecord = false
     }
 
@@ -667,6 +796,8 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
         ground.value = e.groundCondition
         evaporation.value = e.evaporationMm
         waterTemp.value = e.waterTempC
+        remarks.value = e.remarks
+        parseCustomFieldsJson(e.customFieldsJson)
 
         if (!preserveAuto) {
             manualHour.value = e.synopticHourUtc
@@ -801,7 +932,9 @@ class ObservationViewModel(app: Application) : AndroidViewModel(app) {
                         rainMm = rain.value,
                         groundCondition = ground.value,
                         evaporationMm = evaporationV,
-                        waterTempC = waterTempV
+                        waterTempC = waterTempV,
+                        remarks = remarks.value,
+                        customFieldsJson = serializeCustomFieldsJson()
                     )
                 )
                 editingId.value = savedId

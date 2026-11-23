@@ -66,5 +66,9 @@ data class WeatherObservationEntity(
 
     // ---- Section 5 : evaporation & water temp ----
     val evaporationMm: String = "",
-    val waterTempC: String = ""
+    val waterTempC: String = "",
+
+    // ---- Section 6 : Remarks & Dynamic Custom Fields ----
+    val remarks: String = "",
+    val customFieldsJson: String = ""
 )
