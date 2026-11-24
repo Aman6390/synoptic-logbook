@@ -538,6 +538,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
+    val isGlassDark = MaterialTheme.colorScheme.background == GlassPitchBlack
+
     // MVVM: all state + logic lives in ObservationViewModel; this composable
     // only observes it. Aliases keep the UI body readable.
     val showHourPicker = vm.showHourPicker
@@ -636,6 +638,7 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
+                // Top Action Bar: Left (Menu, Delete), Center (Synoptic Hour Capsule), Right (Mini Notepad, Lock Pill)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -661,32 +664,13 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
                     Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(1.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            IconButton(
-                                onClick = { vm.goOlder() },
-                                enabled = canGoOlder && !vm.isScreenLocked.value,
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "Older entry")
-                            }
-                            Text(
-                                posLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            IconButton(
-                                onClick = { vm.goNewer() },
-                                enabled = canGoNewer && !vm.isScreenLocked.value,
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Newer entry")
-                            }
                             // Mini Notepad Button with active Cyan dot indicator
-                            Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                            Box(modifier = Modifier.size(34.dp), contentAlignment = Alignment.Center) {
                                 IconButton(
                                     onClick = { vm.showSideNotepad.value = true },
-                                    modifier = Modifier.size(32.dp)
+                                    modifier = Modifier.size(34.dp)
                                 ) {
                                     Icon(
                                         IconEditNote,
@@ -704,19 +688,97 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
                                     )
                                 }
                             }
-                            // One-Tap Screen Lock Button (Padlock)
-                            IconButton(
+                            // Dedicated Prominent One-Tap Screen Lock Pill Button
+                            Surface(
                                 onClick = { vm.toggleScreenLock() },
-                                modifier = Modifier.size(32.dp)
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (vm.isScreenLocked.value) Color(0xFF00E5FF).copy(alpha = 0.22f) else if (isGlassDark) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (vm.isScreenLocked.value) Color(0xFF00E5FF) else if (isGlassDark) Color.White.copy(alpha = 0.18f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                ),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        if (vm.isScreenLocked.value) Icons.Filled.Lock else IconLockOpen,
+                                        contentDescription = if (vm.isScreenLocked.value) "Unlock screen" else "Lock screen",
+                                        tint = if (vm.isScreenLocked.value) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = if (vm.isScreenLocked.value) "LOCKED" else "LOCK",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 0.5.sp
+                                        ),
+                                        color = if (vm.isScreenLocked.value) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Sub-Header Row: Left (Record Navigation Pill), Right (Auto-save status)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isGlassDark) Color.White.copy(alpha = 0.05f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isGlassDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                        )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp)
+                        ) {
+                            IconButton(
+                                onClick = { vm.goOlder() },
+                                enabled = canGoOlder && !vm.isScreenLocked.value,
+                                modifier = Modifier.size(28.dp)
                             ) {
                                 Icon(
-                                    if (vm.isScreenLocked.value) Icons.Filled.Lock else IconLockOpen,
-                                    contentDescription = if (vm.isScreenLocked.value) "Unlock screen" else "Lock screen",
-                                    tint = if (vm.isScreenLocked.value) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    Icons.Filled.KeyboardArrowLeft,
+                                    contentDescription = "Older entry",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Text(
+                                text = posLabel,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                modifier = Modifier.padding(horizontal = 4.dp)
+                            )
+                            IconButton(
+                                onClick = { vm.goNewer() },
+                                enabled = canGoNewer && !vm.isScreenLocked.value,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.KeyboardArrowRight,
+                                    contentDescription = "Newer entry",
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
                     }
+
+                    Text(
+                        text = saveStatus.value ?: "Auto-saves as you type",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
                 // Locked Banner Indicator
@@ -750,14 +812,6 @@ private fun LogbookScreen(vm: ObservationViewModel, onMenuClick: () -> Unit) {
                         }
                     }
                 }
-
-                // Subtle auto-save indicator lives in the header to save vertical space
-                Text(
-                    saveStatus.value ?: "Auto-saves as you type",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
 
                 // Note preview snippet chip if notes attached and not locked
                 if (vm.hasAttachedNotes && !vm.isScreenLocked.value) {

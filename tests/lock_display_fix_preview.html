@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Synoptic Logbook - Lock Display Button Layout Fix</title>
+  <style>
+    :root {
+      --hud-cyan: #00e5ff;
+      --hud-surface: #0e141d;
+      --hud-border: #1d2e42;
+      --hud-text-primary: #ffffff;
+      --hud-text-muted: rgba(255, 255, 255, 0.45);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body {
+      background: #03070d;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+    h1 { font-size: 20px; margin-bottom: 4px; }
+    p.sub { font-size: 12px; color: var(--hud-text-muted); margin-bottom: 24px; }
+
+    .showcase {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 32px;
+      justify-content: center;
+    }
+
+    /* Exact mobile width 360px (Standard compact Android screen) */
+    .mobile-frame {
+      width: 360px;
+      background: #000;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 28px;
+      padding: 16px 12px 24px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.8), 0 0 0 1px rgba(0,229,255,0.2);
+    }
+
+    .frame-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--hud-cyan);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Top Bar */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .left-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .icon-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .capsule {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      background: rgba(0, 229, 255, 0.12);
+      border: 1px solid rgba(0, 229, 255, 0.45);
+      border-radius: 999px;
+    }
+    .capsule-text { font-size: 13px; font-weight: 700; color: var(--hud-cyan); }
+    .capsule-badge { font-size: 8px; font-weight: 800; background: var(--hud-cyan); color: #000; padding: 2px 5px; border-radius: 999px; }
+
+    .right-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .notepad-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #fff;
+      position: relative;
+    }
+    .notepad-dot {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--hud-cyan);
+      box-shadow: 0 0 4px var(--hud-cyan);
+    }
+
+    .lock-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 9px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+    }
+
+    .lock-btn.unlocked {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: #ffffff;
+    }
+
+    .lock-btn.locked {
+      background: rgba(0, 229, 255, 0.22);
+      border: 1px solid var(--hud-cyan);
+      color: var(--hud-cyan);
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.35);
+    }
+
+    /* Sub-header row */
+    .sub-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      padding: 0 2px;
+    }
+
+    .record-nav {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 8px;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .record-nav svg { cursor: pointer; }
+
+    .save-status {
+      font-size: 10px;
+      color: var(--hud-text-muted);
+    }
+
+    /* Lock banner */
+    .lock-banner {
+      background: rgba(0, 229, 255, 0.12);
+      border: 1px solid rgba(0, 229, 255, 0.4);
+      border-radius: 8px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-size: 9px;
+      font-weight: 800;
+      color: var(--hud-cyan);
+      letter-spacing: 0.6px;
+      margin-bottom: 10px;
+    }
+
+    /* Note preview */
+    .note-pill {
+      background: rgba(0, 229, 255, 0.08);
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      border-radius: 8px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--hud-cyan);
+      margin-bottom: 10px;
+    }
+
+    /* Sample Form Card */
+    .form-card {
+      background: #0e141d;
+      border: 1px solid rgba(0, 229, 255, 0.2);
+      border-radius: 12px;
+      padding: 10px;
+    }
+    .card-title {
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--hud-cyan);
+      margin-bottom: 8px;
+      letter-spacing: 0.8px;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+    }
+    .input-cell {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 6px 8px;
+    }
+    .input-cell label {
+      display: block;
+      font-size: 9px;
+      color: var(--hud-text-muted);
+      margin-bottom: 2px;
+    }
+    .input-cell .val {
+      font-size: 13px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Header Layout & Lock Button Rectification</h1>
+  <p class="sub">Verified on 360dp compact viewport (100% Android phone compatibility, zero clipping)</p>
+
+  <div class="showcase">
+
+    <!-- Screen 1: Unlocked State -->
+    <div class="mobile-frame">
+      <div class="frame-title">
+        <span>360dp Viewport</span>
+        <span>Unlocked Mode</span>
+      </div>
+
+      <div class="top-bar">
+        <div class="left-actions">
+          <div class="icon-btn" title="Menu">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+          </div>
+          <div class="icon-btn" title="Delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </div>
+        </div>
+
+        <div class="capsule">
+          <span class="capsule-text">0300 UTC</span>
+          <span class="capsule-badge">AUTO</span>
+        </div>
+
+        <div class="right-actions">
+          <div class="notepad-btn" title="Mini Notepad">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+            <div class="notepad-dot"></div>
+          </div>
+          <!-- Explicit LOCK Button Pill -->
+          <div class="lock-btn unlocked" title="Lock Screen">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <span>LOCK</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sub-bar with record nav and save status -->
+      <div class="sub-bar">
+        <div class="record-nav">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          <span>NEW</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </div>
+        <div class="save-status">Saved 03:00 UTC</div>
+      </div>
+
+      <!-- Note attached snippet -->
+      <div class="note-pill">
+        <span>📝 <strong>Note:</strong> 02:40 UTC Rain started; gusty…</span>
+        <strong style="font-size: 9px;">EDIT</strong>
+      </div>
+
+      <!-- Surface Observation sample card -->
+      <div class="form-card">
+        <div class="card-title">SURFACE OBSERVATION</div>
+        <div class="grid-3">
+          <div class="input-cell"><label>Dry bulb</label><div class="val">28.4</div></div>
+          <div class="input-cell"><label>Wet bulb</label><div class="val">24.2</div></div>
+          <div class="input-cell"><label>Dew pt</label><div class="val">22.1</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Screen 2: Locked State -->
+    <div class="mobile-frame">
+      <div class="frame-title">
+        <span>360dp Viewport</span>
+        <span style="color: var(--hud-cyan);">Locked Reading Mode</span>
+      </div>
+
+      <div class="top-bar">
+        <div class="left-actions">
+          <div class="icon-btn" style="opacity: 0.4;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+          </div>
+          <div class="icon-btn" style="opacity: 0.4;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </div>
+        </div>
+
+        <div class="capsule" style="opacity: 0.9;">
+          <span class="capsule-text">0300 UTC</span>
+          <span class="capsule-badge">AUTO</span>
+        </div>
+
+        <div class="right-actions">
+          <div class="notepad-btn" title="Mini Notepad">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+            <div class="notepad-dot"></div>
+          </div>
+          <!-- Explicit LOCKED Button Pill (Active Cyan) -->
+          <div class="lock-btn locked" title="Unlock Screen">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <span>LOCKED</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lock Banner -->
+      <div class="lock-banner">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        <span>SCREEN LOCKED • TOUCH FROZEN • TAP PADLOCK TO UNLOCK</span>
+      </div>
+
+      <!-- Sub-bar with record nav and save status -->
+      <div class="sub-bar">
+        <div class="record-nav" style="opacity: 0.5;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          <span>NEW</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </div>
+        <div class="save-status">Saved 03:00 UTC</div>
+      </div>
+
+      <!-- Surface Observation sample card -->
+      <div class="form-card">
+        <div class="card-title">SURFACE OBSERVATION</div>
+        <div class="grid-3">
+          <div class="input-cell"><label>Dry bulb</label><div class="val">28.4</div></div>
+          <div class="input-cell"><label>Wet bulb</label><div class="val">24.2</div></div>
+          <div class="input-cell"><label>Dew pt</label><div class="val">22.1</div></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>
